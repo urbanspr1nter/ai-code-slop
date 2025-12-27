@@ -1,0 +1,30 @@
+.app-container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+}
+
+.main-content {
+  flex: 1;
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-toggle {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 100;
+  padding: 8px;
+  color: var(--text-secondary);
+  background-color: transparent;
+  border-radius: 6px;
+}
+
+.mobile-toggle:hover {
+  background-color: var(--border-subtle);
+}

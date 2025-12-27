@@ -1,0 +1,77 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* Premium Dark Palette */
+  --bg-primary: #343541;
+  --bg-secondary: #202123;
+  /* Sidebar */
+  --bg-input: #40414F;
+  --bg-message-user: #343541;
+  /* Often transparent or distinct */
+  --bg-message-ai: #444654;
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-focus: rgba(255, 255, 255, 0.2);
+
+  /* Typography */
+  --text-primary: #ECECF1;
+  --text-secondary: #C5C5D2;
+  --text-dim: #8E8EA0;
+
+  /* Accents */
+  --accent-primary: #10a37f;
+  /* Open AI Green-ish, or we can go custom */
+  --accent-hover: #1a7f64;
+
+  /* Spacing */
+  --sidebar-width: 260px;
+  --header-height: 0px;
+  /* Minimal header usually */
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Söhne', 'Segoe UI', Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+  /* App handles scrolling */
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(217, 217, 227, 0.1);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(217, 217, 227, 0.2);
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+}
+
+input,
+textarea {
+  font-family: inherit;
+  border: none;
+  outline: none;
+}

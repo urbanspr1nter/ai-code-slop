@@ -1,0 +1,184 @@
+.message-row {
+    width: 100%;
+    padding: 24px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    /* Very subtle separation if needed */
+}
+
+/* 
+   We often have alternating backgrounds in some designs (like ChatGPT old version), 
+   but modern "v2" often just keeps same bg or very subtle shift. 
+   Let's do a subtle background for Assistant to differentiate.
+*/
+.message-row.assistant {
+    background-color: transparent;
+    /* Or var(--bg-message-ai) for that "stripe" look */
+}
+
+.message-row.user {
+    background-color: transparent;
+}
+
+/* Center content with max-width */
+.message-container {
+    max-width: 800px;
+    /* Standard reading width */
+    margin: 0 auto;
+    display: flex;
+    gap: 24px;
+    padding: 0 20px;
+}
+
+.avatar {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    /* ChatGPT style is often rounded square */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.message-row.user .avatar {
+    background-color: #5436DA;
+    /* Generic User Color */
+    border-radius: 50%;
+    /* User often circle */
+}
+
+.message-row.assistant .avatar {
+    background-color: var(--accent-primary);
+}
+
+.message-content {
+    flex: 1;
+    /* Take remaining space */
+    min-width: 0;
+    /* important for markdown code blocks not overflowing */
+    line-height: 1.6;
+    font-size: 1rem;
+    color: var(--text-primary);
+    padding-top: 2px;
+    /* optical alignment with avatar */
+}
+
+/* Markdown overrides for dark mode */
+.markdown-body p {
+    margin-bottom: 1em;
+}
+
+.markdown-body pre {
+    background: #0d0d0d;
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 1em 0;
+}
+
+.markdown-body code {
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.markdown-body pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.message-stats {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0.7;
+}
+
+.separator {
+    color: var(--text-dim);
+    opacity: 0.4;
+}
+
+/* Thinking Block Styles */
+.thinking-block {
+    margin: 0.5rem 0 1rem;
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.thinking-header {
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.thinking-content {
+    padding: 0.75rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    /* Distinct style for thought process */
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.thinking-content .markdown-body p {
+    margin-bottom: 0.5rem;
+}
+
+.thinking-content .markdown-body p:last-child {
+    margin-bottom: 0;
+}
+
+.message-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+    gap: 12px;
+}
+
+.message-stats {
+    margin-top: 0;
+    /* Reset since it's in footer now */
+}
+
+.copy-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: transparent;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    transition: all 0.2s;
+    opacity: 0;
+    /* Hidden by default */
+}
+
+.message-row:hover .copy-btn {
+    opacity: 1;
+    /* Show on hover */
+}
+
+.copy-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.copy-text {
+    font-weight: 500;
+}

@@ -1,0 +1,85 @@
+.chat-input-container {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 20px 20px 20px;
+    position: relative;
+    background: var(--bg-primary);
+    /* Blend with bg but sit on top */
+}
+
+.input-wrapper {
+    position: relative;
+    background-color: var(--bg-input);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    padding: 12px 48px 12px 16px;
+    /* Right padding for button */
+    display: flex;
+    align-items: flex-end;
+}
+
+.input-wrapper:focus-within {
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+}
+
+textarea {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 1rem;
+    line-height: 1.5;
+    resize: none;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 0;
+    margin: 0;
+}
+
+textarea::placeholder {
+    color: var(--text-dim);
+}
+
+textarea:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.send-btn {
+    position: absolute;
+    right: 10px;
+    bottom: 8px;
+    /* Stick to bottom right corner */
+    padding: 8px;
+    border-radius: 6px;
+    color: var(--text-dim);
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.send-btn:not(:disabled) {
+    background-color: var(--accent-primary);
+    color: white;
+}
+
+.send-btn:not(:disabled):hover {
+    background-color: var(--accent-hover);
+}
+
+.send-btn:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.footer-text {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    padding-top: 12px;
+    opacity: 0.8;
+}
