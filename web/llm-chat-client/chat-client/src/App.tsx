@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Layout/Sidebar';
 import { MainChat } from './components/Chat/MainChat';
 import { SettingsModal } from './components/Layout/SettingsModal';
@@ -9,6 +9,7 @@ import './App.css';
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // State for the active chat
   const [messages, setMessages] = useState<Message[]>([]);
@@ -154,41 +155,20 @@ function App() {
     }
   };
 
-  const handleSendMessage = async (content: string) => {
-    // Add user message immediately
-    const userMsg: Message = { role: 'user', content };
-    const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
-    setIsLoading(true);
-
-    // Initialize Session if New
-    let activeSessionId = currentChatId;
-    let currentSession: ChatSession | undefined;
-
-    if (!activeSessionId) {
-      activeSessionId = Date.now().toString();
-      const newSession: ChatSession = {
-        id: activeSessionId,
-        title: "New Chat...",
-        date: new Date(),
-        messages: newMessages
-      };
-      setSessions(prev => [newSession, ...prev]);
-      setCurrentChatId(activeSessionId);
-      currentSession = newSession;
-      // Persist immediately so it exists
-      await saveSession(newSession);
-    } else {
-      // Update existing session in memory for the user message
-      setSessions(prev => prev.map(s =>
-        s.id === activeSessionId ? { ...s, messages: newMessages } : s
-      ));
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsLoading(false);
     }
+  };
 
-    // Connect to actual API
+  const processGeneration = async (messagesToUse: Message[], sessionId: string) => {
+    setIsLoading(true);
+    abortControllerRef.current = new AbortController();
+
     try {
       const endpoint = `${apiUrl.replace(/\/$/, '')}/chat/completions`;
-
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -199,11 +179,12 @@ function App() {
           model: modelName,
           messages: [
             ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-            ...newMessages
+            ...messagesToUse
           ].map(({ role, content }) => ({ role, content })),
           temperature: temperature,
           stream: true
-        })
+        }),
+        signal: abortControllerRef.current.signal
       });
 
       if (!response.ok) {
@@ -272,39 +253,9 @@ function App() {
         }
       }
 
-      // After streaming is done:
-      // 1. Update the session in history with full messages
-      // 2. Generate title if it's the first exchange
-      if (newMessages.length === 1 && activeSessionId) {
-        // We have the User msg (newMessages[0]) and the accumulated AI content
-        generateTitle(content, accumulatedContent).then(async (title) => {
-          console.log("Applying generated title:", title);
+      // Generation Complete
+      abortControllerRef.current = null;
 
-          // 1. Optimistic Update
-          setSessions(prev => prev.map(s =>
-            s.id === activeSessionId ? { ...s, title } : s
-          ));
-
-          // 2. Persist & Force Sync
-          try {
-            const freshSession = await getSession(activeSessionId);
-            if (freshSession) {
-              await saveSession({ ...freshSession, title });
-
-              // Force reload from source of truth to ensure UI matches DB exactly
-              // This handles any race conditions or state mismatches
-              const allSessions = await getSessions();
-              setSessions(allSessions);
-            }
-          } catch (err) {
-            console.error("Error saving title:", err);
-          }
-        });
-      }
-
-      // Sync final messages to session
-      // (We need to grab the latest state, so we use the functional update inside the stream or just do it here carefully)
-      // Actually setMessages is async. Let's use the final accumulatedContent to reconstruct the state for saving.
       const finalMsg: Message = {
         role: 'assistant',
         content: accumulatedContent,
@@ -314,52 +265,117 @@ function App() {
           tokensPerSecond: tokenCount / ((Date.now() - startTime) / 1000)
         }
       };
-      const finalMessages = [...newMessages, finalMsg];
 
+      const finalMessages = [...messagesToUse, finalMsg];
+
+      // Update local session state
       setSessions(prev => prev.map(s =>
-        s.id === activeSessionId ? { ...s, messages: finalMessages } : s
+        s.id === sessionId ? { ...s, messages: finalMessages } : s
       ));
 
       // Persist final message state
-      if (activeSessionId) {
-        // Look up fresh session to avoid overwriting a title that might have just been generated/saved
+      if (sessionId) {
         try {
-          const freshSession = await getSession(activeSessionId);
+          const freshSession = await getSession(sessionId);
           if (freshSession) {
             const updated = { ...freshSession, messages: finalMessages };
             await saveSession(updated);
           } else {
-            // Fallback if not found (shouldn't happen)
-            if (currentSession) {
-              const updated = { ...currentSession, messages: finalMessages };
-              await saveSession(updated);
-            }
+            // Fallback logic
           }
-        } catch (e) {
-          console.error("Failed to save final messages", e);
-        }
+        } catch (e) { console.error("Failed to save final", e); }
       }
 
+      // Title Generation (only if first exchange)
+      if (messagesToUse.length === 1 && sessionId) {
+        generateTitle(messagesToUse[0].content, accumulatedContent).then(async (title) => {
+          console.log("Applying generated title:", title);
+          setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title } : s));
+          try {
+            const s = await getSession(sessionId);
+            if (s) {
+              await saveSession({ ...s, title });
+              // Force sync
+              const allSessions = await getSessions();
+              setSessions(allSessions);
+            }
+          } catch (e) { console.error(e); }
+        });
+      }
 
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Generation stopped by user');
+        return;
+      }
       console.error("Chat Error:", error);
       const errorMsg: Message = {
         role: 'assistant',
-        content: `**Error connecting to LLM**: ${(error as Error).message}\n\n**Debug Info:**\n- Endpoint: \`${apiUrl}/chat/completions\`\n- Model: \`${modelName}\`\n\nCheck your settings or server status.`
+        content: `**Error**: ${(error as Error).message}`
       };
-
       setMessages(prev => {
-        // ... (Error handling logic same as before)
         const next = [...prev];
-        const lastMsg = next[next.length - 1];
-        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content === '') {
-          next[next.length - 1] = errorMsg;
-          return next;
-        }
-        return [...prev, errorMsg];
+        const last = next[next.length - 1];
+        if (last?.role === 'assistant' && !last.content) next[next.length - 1] = errorMsg;
+        else next.push(errorMsg);
+        return next;
       });
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleSendMessage = async (content: string) => {
+    const userMsg: Message = { role: 'user', content };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages); // UI update
+
+    // Initialize Session if New
+    let activeSessionId = currentChatId;
+    if (!activeSessionId) {
+      activeSessionId = Date.now().toString();
+      const newSession: ChatSession = {
+        id: activeSessionId,
+        title: "New Chat...",
+        date: new Date(),
+        messages: newMessages
+      };
+      setSessions(prev => [newSession, ...prev]);
+      setCurrentChatId(activeSessionId);
+      await saveSession(newSession);
+    } else {
+      // Update existing
+      setSessions(prev => prev.map(s =>
+        s.id === activeSessionId ? { ...s, messages: newMessages } : s
+      ));
+      const s = sessions.find(s => s.id === activeSessionId);
+      if (s) await saveSession({ ...s, messages: newMessages });
+    }
+
+    // Call Generation
+    await processGeneration(newMessages, activeSessionId);
+  };
+
+  const handleRegenerate = async () => {
+    if (isLoading || messages.length === 0) return;
+
+    const lastMsg = messages[messages.length - 1];
+
+    // If the last message IS from assistant, we remove it and re-run conversation up to that point
+    if (lastMsg.role === 'assistant') {
+      const historyToKeep = messages.slice(0, -1);
+      setMessages(historyToKeep);
+
+      if (currentChatId) {
+        processGeneration(historyToKeep, currentChatId);
+      }
+    }
+    // If last matches user (e.g. error condition where AI didn't reply), we just re-run
+    else if (lastMsg.role === 'user') {
+      if (currentChatId) {
+        processGeneration(messages, currentChatId);
+      }
     }
   };
 
@@ -403,6 +419,8 @@ function App() {
           onSendMessage={handleSendMessage}
           isLoading={isLoading}
           chatId={currentChatId}
+          onStop={handleStop}
+          onRegenerate={handleRegenerate}
         />
       </div>
 

@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './MessageBubble.css';
-import { User, Bot, Copy, Check } from 'lucide-react';
+import { User, Bot, Copy, Check, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
 interface MessageBubbleProps {
@@ -12,9 +12,10 @@ interface MessageBubbleProps {
         totalTokens: number;
         generationTime: number; // in seconds
     };
+    onRegenerate?: () => void;
 }
 
-export function MessageBubble({ role, content, stats }: MessageBubbleProps) {
+export function MessageBubble({ role, content, stats, onRegenerate }: MessageBubbleProps) {
     const [isCopied, setIsCopied] = useState(false);
 
     const handleCopy = async () => {
@@ -77,14 +78,26 @@ export function MessageBubble({ role, content, stats }: MessageBubbleProps) {
                                 <span>{stats.tokensPerSecond.toFixed(1)} t/s</span>
                             </div>
                         )}
-                        <button
-                            className="copy-btn"
-                            onClick={handleCopy}
-                            title="Copy as Markdown"
-                        >
-                            {isCopied ? <Check size={14} /> : <Copy size={14} />}
-                            <span className="copy-text">{isCopied ? 'Copied' : 'Copy'}</span>
-                        </button>
+                        <div className="message-actions" style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                                className="copy-btn"
+                                onClick={handleCopy}
+                                title="Copy as Markdown"
+                            >
+                                {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                                <span className="copy-text">{isCopied ? 'Copied' : 'Copy'}</span>
+                            </button>
+                            {onRegenerate && (
+                                <button
+                                    className="copy-btn"
+                                    onClick={onRegenerate}
+                                    title="Regenerate Response"
+                                >
+                                    <RefreshCw size={14} />
+                                    <span className="copy-text">Regenerate</span>
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

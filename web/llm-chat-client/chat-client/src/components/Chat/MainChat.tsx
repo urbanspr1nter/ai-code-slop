@@ -18,9 +18,11 @@ interface MainChatProps {
     onSendMessage: (content: string) => void;
     isLoading?: boolean;
     chatId?: string | null;
+    onStop?: () => void;
+    onRegenerate?: () => void;
 }
 
-export function MainChat({ messages, onSendMessage, isLoading, chatId }: MainChatProps) {
+export function MainChat({ messages, onSendMessage, isLoading, chatId, onStop, onRegenerate }: MainChatProps) {
     const bottomRef = useRef<HTMLDivElement>(null);
 
     // Auto scroll to bottom
@@ -44,6 +46,14 @@ export function MainChat({ messages, onSendMessage, isLoading, chatId }: MainCha
                                 role={msg.role}
                                 content={msg.content}
                                 stats={msg.stats}
+                                onRegenerate={
+                                    !isLoading &&
+                                        onRegenerate &&
+                                        idx === messages.length - 1 &&
+                                        msg.role === 'assistant'
+                                        ? onRegenerate
+                                        : undefined
+                                }
                             />
                         ))}
                         {isLoading && (
@@ -59,7 +69,12 @@ export function MainChat({ messages, onSendMessage, isLoading, chatId }: MainCha
 
             </div>
             <div className="input-area-wrapper">
-                <ChatInput onSend={onSendMessage} disabled={isLoading} focusTrigger={chatId} />
+                <ChatInput
+                    onSend={onSendMessage}
+                    disabled={isLoading}
+                    focusTrigger={chatId}
+                    onStop={onStop}
+                />
             </div>
         </main>
     );

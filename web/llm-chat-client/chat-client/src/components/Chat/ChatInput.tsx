@@ -1,16 +1,18 @@
-import { Send } from 'lucide-react';
+import { Send, Square } from 'lucide-react';
 import './ChatInput.css';
 import { useState, useRef, useEffect } from 'react';
 
 interface ChatInputProps {
     onSend: (message: string) => void;
     disabled?: boolean;
+    onStop?: () => void;
 }
 
-export function ChatInput({ onSend, disabled, focusTrigger }: ChatInputProps & { focusTrigger?: any }) {
+export function ChatInput({ onSend, disabled, focusTrigger, onStop }: ChatInputProps & { focusTrigger?: any }) {
     const [input, setInput] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    // ... (rest is same) ...
     // Focus on trigger change (e.g. chat switch)
     useEffect(() => {
         if (!disabled && textareaRef.current) {
@@ -63,11 +65,12 @@ export function ChatInput({ onSend, disabled, focusTrigger }: ChatInputProps & {
                     disabled={disabled}
                 />
                 <button
-                    className="send-btn"
-                    onClick={handleSubmit}
-                    disabled={!input.trim() || disabled}
+                    className={`send-btn ${disabled && onStop ? 'stop-btn' : ''}`}
+                    onClick={disabled && onStop ? onStop : handleSubmit}
+                    disabled={disabled && !onStop ? true : (!input.trim() && !disabled)}
+                    title={disabled && onStop ? "Stop Generation" : "Send Message"}
                 >
-                    <Send size={16} />
+                    {disabled && onStop ? <Square size={14} fill="currentColor" /> : <Send size={16} />}
                 </button>
             </div>
             <div className="footer-text">
