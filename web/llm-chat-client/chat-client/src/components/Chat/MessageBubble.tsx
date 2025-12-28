@@ -1,5 +1,8 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './MessageBubble.css';
@@ -119,9 +122,15 @@ export function MessageBubble({ role, content, stats, onRegenerate, isStreaming,
                             <pre className="raw-content">{content}</pre>
                         ) : (
                             (() => {
+                                // Normalize math delimiters for KaTeX
+                                // Replace \[ ... \] with $$ ... $$ and \( ... \) with $ ... $
+                                const displayContent = content
+                                    .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
+                                    .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
+
                                 // Robust parsing for <think> blocks with case-insensitivity:
-                                const openMatch = /<think>/i.exec(content);
-                                const closeMatch = /<\/think>/i.exec(content);
+                                const openMatch = /<think>/i.exec(displayContent);
+                                const closeMatch = /<\/think>/i.exec(displayContent);
 
                                 const openIdx = openMatch ? openMatch.index : -1;
                                 const closeIdx = closeMatch ? closeMatch.index : -1;
@@ -133,28 +142,28 @@ export function MessageBubble({ role, content, stats, onRegenerate, isStreaming,
                                     // Completed thought block (or at least the first one)
                                     if (openIdx !== -1 && openIdx < closeIdx) {
                                         // Standard case: <think>... </think>
-                                        const before = content.slice(0, openIdx);
+                                        const before = displayContent.slice(0, openIdx);
                                         if (before.trim()) answer = before; // Preamble (rare but possible)
 
-                                        thought = content.slice(openIdx + openMatch![0].length, closeIdx).trim();
+                                        thought = displayContent.slice(openIdx + openMatch![0].length, closeIdx).trim();
 
-                                        const after = content.slice(closeIdx + closeMatch![0].length);
+                                        const after = displayContent.slice(closeIdx + closeMatch![0].length);
                                         if (answer) answer += after;
                                         else answer = after;
                                     } else {
                                         // Implicit start: ... </think>
-                                        thought = content.slice(0, closeIdx).replace(/<think>/i, '').trim();
-                                        answer = content.slice(closeIdx + closeMatch![0].length);
+                                        thought = displayContent.slice(0, closeIdx).replace(/<think>/i, '').trim();
+                                        answer = displayContent.slice(closeIdx + closeMatch![0].length);
                                     }
                                 } else if (openIdx !== -1) {
                                     // Streaming thought: <think>...
-                                    const before = content.slice(0, openIdx);
+                                    const before = displayContent.slice(0, openIdx);
                                     if (before.trim()) answer = before;
 
-                                    thought = content.slice(openIdx + openMatch![0].length);
+                                    thought = displayContent.slice(openIdx + openMatch![0].length);
                                 } else {
                                     // No thinking tags found yet
-                                    answer = content;
+                                    answer = displayContent;
                                 }
 
                                 const showPlaceholder = thought !== null && thought.trim().length === 0;
@@ -180,7 +189,8 @@ export function MessageBubble({ role, content, stats, onRegenerate, isStreaming,
                                                     <div className="thinking-content">
                                                         {!showPlaceholder ? (
                                                             <ReactMarkdown
-                                                                remarkPlugins={[remarkGfm]}
+                                                                remarkPlugins={[remarkGfm, remarkMath]}
+                                                                rehypePlugins={[rehypeKatex]}
                                                                 components={markdownComponents}
                                                             >
                                                                 {thought}
@@ -195,7 +205,8 @@ export function MessageBubble({ role, content, stats, onRegenerate, isStreaming,
                                         {(answer !== null) && (
                                             <div className="answer-content">
                                                 <ReactMarkdown
-                                                    remarkPlugins={[remarkGfm]}
+                                                    remarkPlugins={[remarkGfm, remarkMath]}
+                                                    rehypePlugins={[rehypeKatex]}
                                                     components={markdownComponents}
                                                 >
                                                     {answer}
