@@ -69,6 +69,43 @@
     margin-bottom: 1em;
 }
 
+/* Table Styles */
+.markdown-body table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 1em 0;
+    border-radius: 6px;
+    /* Clean borders */
+    border: 1px solid var(--border-subtle);
+}
+
+.markdown-body thead {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.markdown-body th,
+.markdown-body td {
+    padding: 10px 16px;
+    border: 1px solid var(--border-subtle);
+    text-align: left;
+}
+
+.markdown-body th {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.markdown-body tbody tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.markdown-body tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
 /* Generic Code Block (non-highlighted) */
 .code-block {
     background: #0d0d0d;
@@ -169,6 +206,26 @@
     margin-bottom: 0;
 }
 
+.thinking-placeholder {
+    color: var(--text-dim);
+    animation: pulse 1.5s infinite ease-in-out;
+    display: inline-block;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0.4;
+    }
+
+    50% {
+        opacity: 0.8;
+    }
+
+    100% {
+        opacity: 0.4;
+    }
+}
+
 .message-footer {
     display: flex;
     align-items: center;
@@ -237,6 +294,41 @@
 }
 
 /* Override default pre margin since wrapper handles it */
+/* Override default pre margin since wrapper handles it */
 .code-block-wrapper pre {
     margin: 0 !important;
+}
+
+.raw-content {
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.9em;
+    padding: 1rem;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    overflow-x: auto;
+}
+
+.code-copy-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: transparent;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.code-copy-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.code-copy-text {
+    font-weight: 500;
 }

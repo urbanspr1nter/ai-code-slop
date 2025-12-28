@@ -164,6 +164,8 @@ function App() {
 
       const startTime = Date.now();
       let tokenCount = 0;
+      let hasStartedReasoning = false;
+      let hasEndedReasoning = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -184,10 +186,27 @@ function App() {
 
           try {
             const data = JSON.parse(dataStr);
-            const delta = data.choices[0]?.delta?.content || '';
 
-            if (delta) {
-              accumulatedContent += delta;
+            const deltaContent = data.choices[0]?.delta?.content || '';
+            const deltaReasoning = data.choices[0]?.delta?.reasoning_content || data.choices[0]?.delta?.reasoning || '';
+
+            if (deltaReasoning) {
+              if (!hasStartedReasoning) {
+                accumulatedContent += "<think>";
+                hasStartedReasoning = true;
+              }
+              accumulatedContent += deltaReasoning;
+            }
+
+            if (deltaContent) {
+              if (hasStartedReasoning && !hasEndedReasoning) {
+                accumulatedContent += "</think>";
+                hasEndedReasoning = true;
+              }
+              accumulatedContent += deltaContent;
+            }
+
+            if (deltaContent || deltaReasoning) {
               tokenCount++;
 
               const currentTime = Date.now();
@@ -212,6 +231,11 @@ function App() {
             console.error("Error parsing stream chunk:", e);
           }
         }
+      }
+
+      // Handle case where stream ended inside thought field without explicit end
+      if (hasStartedReasoning && !hasEndedReasoning) {
+        accumulatedContent += "</think>";
       }
 
       // Generation Complete

@@ -3,8 +3,44 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './MessageBubble.css';
-import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
+import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { useState } from 'react';
+
+const CodeBlock = ({ language, children, ...props }: any) => {
+    const [isCopied, setIsCopied] = useState(false);
+
+    const handleCopy = async () => {
+        const text = String(children).replace(/\n$/, '');
+        try {
+            await navigator.clipboard.writeText(text);
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy code:', err);
+        }
+    };
+
+    return (
+        <div className="code-block-wrapper">
+            <div className="code-block-header">
+                <span className="code-language">{language}</span>
+                <button onClick={handleCopy} className="code-copy-btn" title="Copy code">
+                    {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                    <span className="code-copy-text">{isCopied ? 'Copied' : 'Copy'}</span>
+                </button>
+            </div>
+            <SyntaxHighlighter
+                style={vscDarkPlus}
+                language={language}
+                PreTag="div"
+                customStyle={{ margin: 0, borderRadius: '0 0 6px 6px' }}
+                {...props}
+            >
+                {String(children).replace(/\n$/, '')}
+            </SyntaxHighlighter>
+        </div>
+    );
+};
 
 interface MessageBubbleProps {
     role: 'user' | 'assistant';
@@ -20,6 +56,7 @@ interface MessageBubbleProps {
 export function MessageBubble({ role, content, stats, onRegenerate }: MessageBubbleProps) {
     const [isCopied, setIsCopied] = useState(false);
     const [isThinkingExpanded, setIsThinkingExpanded] = useState(true);
+    const [showRaw, setShowRaw] = useState(false);
 
     const handleCopy = async () => {
         try {
@@ -40,20 +77,9 @@ export function MessageBubble({ role, content, stats, onRegenerate }: MessageBub
 
             if (!inline && match) {
                 return (
-                    <div className="code-block-wrapper">
-                        <div className="code-block-header">
-                            <span className="code-language">{language}</span>
-                        </div>
-                        <SyntaxHighlighter
-                            style={vscDarkPlus}
-                            language={language}
-                            PreTag="div"
-                            customStyle={{ margin: 0, borderRadius: '0 0 6px 6px' }}
-                            {...props}
-                        >
-                            {String(children).replace(/\n$/, '')}
-                        </SyntaxHighlighter>
-                    </div>
+                    <CodeBlock language={language} {...props}>
+                        {children}
+                    </CodeBlock>
                 );
             } else if (!inline) {
                 // Regular code block without language
@@ -87,79 +113,97 @@ export function MessageBubble({ role, content, stats, onRegenerate }: MessageBub
                     </div>
 
                     <div className="markdown-body">
-                        {(() => {
-                            // Robust parsing for <think> blocks:
-                            // 1. Explicit </think>: content before is thought (implicit start), content after is answer.
-                            // 2. Explicit <think>: content after is thought (streaming).
-                            // 3. No tags: content is answer.
+                        {showRaw ? (
+                            <pre className="raw-content">{content}</pre>
+                        ) : (
+                            (() => {
+                                // Robust parsing for <think> blocks with case-insensitivity:
+                                const openMatch = /<think>/i.exec(content);
+                                const closeMatch = /<\/think>/i.exec(content);
 
-                            const closeIdx = content.indexOf('</think>');
-                            const openIdx = content.indexOf('<think>');
+                                const openIdx = openMatch ? openMatch.index : -1;
+                                const closeIdx = closeMatch ? closeMatch.index : -1;
 
-                            let thought: string | null = null;
-                            let answer: string | null = null;
+                                let thought: string | null = null;
+                                let answer: string | null = null;
 
-                            if (closeIdx !== -1) {
-                                // Found closing tag. Everything before is thought.
-                                let rawThought = content.slice(0, closeIdx);
-                                // Clean optional start tag if present
-                                rawThought = rawThought.replace(/<think>/i, '');
-                                thought = rawThought.trim();
-                                answer = content.slice(closeIdx + 8); // length of </think>
-                            } else if (openIdx !== -1) {
-                                // Found open tag, no close. Streaming thought.
-                                // Content before <think> is treated as answer (preamble)
-                                const before = content.slice(0, openIdx);
-                                if (before.trim()) answer = before;
+                                if (closeIdx !== -1) {
+                                    // Completed thought block (or at least the first one)
+                                    if (openIdx !== -1 && openIdx < closeIdx) {
+                                        // Standard case: <think>... </think>
+                                        const before = content.slice(0, openIdx);
+                                        if (before.trim()) answer = before; // Preamble (rare but possible)
 
-                                thought = content.slice(openIdx + 7).trim(); // length of <think>
-                            } else {
-                                // No tags. Pure answer.
-                                answer = content;
-                            }
+                                        thought = content.slice(openIdx + openMatch![0].length, closeIdx).trim();
 
-                            return (
-                                <>
-                                    {thought && (
-                                        <div className="thinking-block">
-                                            <div
-                                                className="thinking-header clickable"
-                                                onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
-                                                title={isThinkingExpanded ? "Collapse Thought" : "Expand Thought"}
-                                            >
-                                                <div className="thinking-title-group">
-                                                    <span className="thinking-icon">💭</span>
-                                                    <span className="thinking-label">Thinking Process</span>
+                                        const after = content.slice(closeIdx + closeMatch![0].length);
+                                        if (answer) answer += after;
+                                        else answer = after;
+                                    } else {
+                                        // Implicit start: ... </think>
+                                        thought = content.slice(0, closeIdx).replace(/<think>/i, '').trim();
+                                        answer = content.slice(closeIdx + closeMatch![0].length);
+                                    }
+                                } else if (openIdx !== -1) {
+                                    // Streaming thought: <think>...
+                                    const before = content.slice(0, openIdx);
+                                    if (before.trim()) answer = before;
+
+                                    thought = content.slice(openIdx + openMatch![0].length);
+                                } else {
+                                    // No thinking tags found yet
+                                    answer = content;
+                                }
+
+                                const showPlaceholder = thought !== null && thought.trim().length === 0;
+
+                                return (
+                                    <>
+                                        {thought !== null && (
+                                            <div className="thinking-block">
+                                                <div
+                                                    className="thinking-header clickable"
+                                                    onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
+                                                    title={isThinkingExpanded ? "Collapse Thought" : "Expand Thought"}
+                                                >
+                                                    <div className="thinking-title-group">
+                                                        <span className="thinking-icon">💭</span>
+                                                        <span className="thinking-label">Thinking Process</span>
+                                                    </div>
+                                                    <div className="thinking-chevron">
+                                                        {isThinkingExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                                    </div>
                                                 </div>
-                                                <div className="thinking-chevron">
-                                                    {isThinkingExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                                </div>
+                                                {isThinkingExpanded && (
+                                                    <div className="thinking-content">
+                                                        {!showPlaceholder ? (
+                                                            <ReactMarkdown
+                                                                remarkPlugins={[remarkGfm]}
+                                                                components={markdownComponents}
+                                                            >
+                                                                {thought}
+                                                            </ReactMarkdown>
+                                                        ) : (
+                                                            <span className="thinking-placeholder">Thinking...</span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
-                                            {isThinkingExpanded && (
-                                                <div className="thinking-content">
-                                                    <ReactMarkdown
-                                                        remarkPlugins={[remarkGfm]}
-                                                        components={markdownComponents}
-                                                    >
-                                                        {thought}
-                                                    </ReactMarkdown>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    {(answer !== null) && (
-                                        <div className="answer-content">
-                                            <ReactMarkdown
-                                                remarkPlugins={[remarkGfm]}
-                                                components={markdownComponents}
-                                            >
-                                                {answer}
-                                            </ReactMarkdown>
-                                        </div>
-                                    )}
-                                </>
-                            );
-                        })()}
+                                        )}
+                                        {(answer !== null) && (
+                                            <div className="answer-content">
+                                                <ReactMarkdown
+                                                    remarkPlugins={[remarkGfm]}
+                                                    components={markdownComponents}
+                                                >
+                                                    {answer}
+                                                </ReactMarkdown>
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()
+                        )}
                     </div>
 
                     <div className="message-footer">
@@ -173,6 +217,14 @@ export function MessageBubble({ role, content, stats, onRegenerate }: MessageBub
                             </div>
                         )}
                         <div className="message-actions" style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                                className="copy-btn"
+                                onClick={() => setShowRaw(!showRaw)}
+                                title={showRaw ? "Show Rendered" : "Show Raw"}
+                            >
+                                <FileText size={14} />
+                                <span className="copy-text">{showRaw ? 'Rendered' : 'Raw'}</span>
+                            </button>
                             <button
                                 className="copy-btn"
                                 onClick={handleCopy}
