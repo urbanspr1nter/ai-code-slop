@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Layout/Sidebar';
 import { MainChat } from './components/Chat/MainChat';
 import { SettingsModal } from './components/Layout/SettingsModal';
-import { saveSession, getSessions, deleteSession, getSession } from './lib/db';
+import { saveSession, getSessions, deleteSession, getSession, saveSettings, getSettings } from './lib/db';
 import type { ChatSession, Message } from './lib/db';
 import './App.css';
 
@@ -26,11 +26,22 @@ function App() {
   const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.');
   const [temperature, setTemperature] = useState(0.7);
 
-  // Load history on mount
+  // Load history and settings on mount
   useEffect(() => {
-    getSessions().then(loadedSessions => {
+    const loadData = async () => {
+      const [loadedSessions, loadedSettings] = await Promise.all([
+        getSessions(),
+        getSettings()
+      ]);
       setSessions(loadedSessions);
-    });
+      if (loadedSettings) {
+        setApiUrl(loadedSettings.apiUrl);
+        setModelName(loadedSettings.modelName);
+        setSystemPrompt(loadedSettings.systemPrompt);
+        setTemperature(loadedSettings.temperature);
+      }
+    };
+    loadData();
   }, []);
 
   // Save session whenever it updates (debounced ideally, but straightforward for now)
@@ -375,11 +386,17 @@ function App() {
         currentModel={modelName}
         currentSystemPrompt={systemPrompt}
         currentTemperature={temperature}
-        onSave={(url, model, sysPrompt, temp) => {
+        onSave={async (url, model, sysPrompt, temp) => {
           setApiUrl(url);
           setModelName(model);
           setSystemPrompt(sysPrompt);
           setTemperature(temp);
+          await saveSettings({
+            apiUrl: url,
+            modelName: model,
+            systemPrompt: sysPrompt,
+            temperature: temp
+          });
         }}
       />
     </div>

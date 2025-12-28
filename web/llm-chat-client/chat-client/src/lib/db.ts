@@ -18,21 +18,39 @@ interface ChatSession {
     messages: Message[];
 }
 
+const DB_VERSION = 2;
+
 interface ChatDB extends DBSchema {
     sessions: {
         key: string;
         value: ChatSession;
         indexes: { 'by-date': Date };
     };
+    settings: {
+        key: string;
+        value: AppSettings;
+    };
+}
+
+export interface AppSettings {
+    apiUrl: string;
+    modelName: string;
+    systemPrompt: string;
+    temperature: number;
 }
 
 const DB_NAME = 'ai-chat-db';
-const DB_VERSION = 1;
 
 export const dbPromise = openDB<ChatDB>(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-        const store = db.createObjectStore('sessions', { keyPath: 'id' });
-        store.createIndex('by-date', 'date');
+    upgrade(db, oldVersion) {
+        // Upgrade logic based on versions
+        if (oldVersion < 1) {
+            const store = db.createObjectStore('sessions', { keyPath: 'id' });
+            store.createIndex('by-date', 'date');
+        }
+        if (oldVersion < 2) {
+            db.createObjectStore('settings');
+        }
     },
 });
 
@@ -56,6 +74,16 @@ export async function getSessions(): Promise<ChatSession[]> {
 export async function deleteSession(id: string) {
     const db = await dbPromise;
     await db.delete('sessions', id);
+}
+
+export async function saveSettings(settings: AppSettings) {
+    const db = await dbPromise;
+    await db.put('settings', settings, 'global');
+}
+
+export async function getSettings(): Promise<AppSettings | undefined> {
+    const db = await dbPromise;
+    return db.get('settings', 'global');
 }
 
 export type { ChatSession, Message };
