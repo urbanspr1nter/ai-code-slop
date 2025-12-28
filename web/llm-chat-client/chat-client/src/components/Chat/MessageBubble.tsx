@@ -3,7 +3,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './MessageBubble.css';
-import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronRight, FileText } from 'lucide-react';
+import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronRight, FileText, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 const CodeBlock = ({ language, children, ...props }: any) => {
@@ -51,9 +51,11 @@ interface MessageBubbleProps {
         generationTime: number; // in seconds
     };
     onRegenerate?: () => void;
+    isStreaming?: boolean;
+    onDelete?: () => void;
 }
 
-export function MessageBubble({ role, content, stats, onRegenerate }: MessageBubbleProps) {
+export function MessageBubble({ role, content, stats, onRegenerate, isStreaming, onDelete }: MessageBubbleProps) {
     const [isCopied, setIsCopied] = useState(false);
     const [isThinkingExpanded, setIsThinkingExpanded] = useState(true);
     const [showRaw, setShowRaw] = useState(false);
@@ -102,7 +104,7 @@ export function MessageBubble({ role, content, stats, onRegenerate }: MessageBub
     };
 
     return (
-        <div className={`message-row ${role}`}>
+        <div className={`message-row ${role} ${isStreaming ? 'streaming' : ''}`}>
             <div className="message-container">
                 <div className="avatar">
                     {role === 'user' ? <User size={20} /> : <Bot size={20} />}
@@ -241,6 +243,17 @@ export function MessageBubble({ role, content, stats, onRegenerate }: MessageBub
                                 >
                                     <RefreshCw size={14} />
                                     <span className="copy-text">Regenerate</span>
+                                </button>
+                            )}
+                            {onDelete && (
+                                <button
+                                    className="copy-btn"
+                                    onClick={onDelete}
+                                    title="Delete Message"
+                                    style={{ color: '#ef4444' }}
+                                >
+                                    <Trash2 size={14} />
+                                    <span className="copy-text">Delete</span>
                                 </button>
                             )}
                         </div>

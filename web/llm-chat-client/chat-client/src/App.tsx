@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Sidebar } from './components/Layout/Sidebar';
 import { MainChat } from './components/Chat/MainChat';
 import { SettingsModal } from './components/Layout/SettingsModal';
@@ -163,6 +163,7 @@ function App() {
       let accumulatedContent = '';
 
       const startTime = Date.now();
+      let lastUiUpdate = 0;
       let tokenCount = 0;
       let hasStartedReasoning = false;
       let hasEndedReasoning = false;
@@ -210,22 +211,26 @@ function App() {
               tokenCount++;
 
               const currentTime = Date.now();
-              const duration = (currentTime - startTime) / 1000;
-              const tps = duration > 0 ? tokenCount / duration : 0;
+              // Throttle UI updates to ~30fps (every 33ms) to reduce rendering jank
+              if (currentTime - lastUiUpdate > 33) {
+                const duration = (currentTime - startTime) / 1000;
+                const tps = duration > 0 ? tokenCount / duration : 0;
 
-              setMessages(prev => {
-                const next = [...prev];
-                const lastMsg = next[next.length - 1];
-                if (lastMsg.role === 'assistant') {
-                  lastMsg.content = accumulatedContent;
-                  lastMsg.stats = {
-                    totalTokens: tokenCount,
-                    generationTime: duration,
-                    tokensPerSecond: tps
-                  };
-                }
-                return next;
-              });
+                setMessages(prev => {
+                  const next = [...prev];
+                  const lastMsg = next[next.length - 1];
+                  if (lastMsg.role === 'assistant') {
+                    lastMsg.content = accumulatedContent;
+                    lastMsg.stats = {
+                      totalTokens: tokenCount,
+                      generationTime: duration,
+                      tokensPerSecond: tps
+                    };
+                  }
+                  return next;
+                });
+                lastUiUpdate = currentTime;
+              }
             }
           } catch (e) {
             console.error("Error parsing stream chunk:", e);
@@ -238,16 +243,34 @@ function App() {
         accumulatedContent += "</think>";
       }
 
-      // Generation Complete
+      // Verify and set final message logic
       abortControllerRef.current = null;
+
+      const finalDuration = (Date.now() - startTime) / 1000;
+      const finalTps = finalDuration > 0 ? tokenCount / finalDuration : 0;
+
+      // Force final update to ensure all content is visible
+      setMessages(prev => {
+        const next = [...prev];
+        const lastMsg = next[next.length - 1];
+        if (lastMsg.role === 'assistant') {
+          lastMsg.content = accumulatedContent;
+          lastMsg.stats = {
+            totalTokens: tokenCount,
+            generationTime: finalDuration,
+            tokensPerSecond: finalTps
+          };
+        }
+        return next;
+      });
 
       const finalMsg: Message = {
         role: 'assistant',
         content: accumulatedContent,
         stats: {
           totalTokens: tokenCount,
-          generationTime: (Date.now() - startTime) / 1000,
-          tokensPerSecond: tokenCount / ((Date.now() - startTime) / 1000)
+          generationTime: finalDuration,
+          tokensPerSecond: finalTps
         }
       };
 
@@ -365,6 +388,19 @@ function App() {
     }
   };
 
+  const handleDeleteMessage = async (index: number) => {
+    const updatedMessages = messages.filter((_, i) => i !== index);
+    setMessages(updatedMessages);
+
+    if (currentChatId) {
+      setSessions(prev => prev.map(s => s.id === currentChatId ? { ...s, messages: updatedMessages } : s));
+      const session = sessions.find(s => s.id === currentChatId);
+      if (session) {
+        await saveSession({ ...session, messages: updatedMessages });
+      }
+    }
+  };
+
   const handleRenameChat = async (id: string, newTitle: string) => {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, title: newTitle } : s));
     const session = await getSession(id);
@@ -372,6 +408,10 @@ function App() {
       await saveSession({ ...session, title: newTitle });
     }
   };
+
+  const contextTokens = useMemo(() => {
+    return messages.reduce((acc, m) => acc + Math.ceil(m.content.length / 4), 0) + Math.ceil((systemPrompt || '').length / 4);
+  }, [messages, systemPrompt]);
 
   return (
     <div className="app-container">
@@ -400,6 +440,8 @@ function App() {
           chatId={currentChatId}
           onStop={handleStop}
           onRegenerate={handleRegenerate}
+          contextTokens={contextTokens}
+          onDeleteMessage={handleDeleteMessage}
         />
       </div>
 

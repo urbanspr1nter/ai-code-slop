@@ -3,6 +3,45 @@
     padding: 24px 0;
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     /* Very subtle separation if needed */
+    animation: message-fade-in 0.3s ease-out forwards;
+}
+
+@keyframes message-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Streaming Cursor Effect */
+@keyframes cursor-blink {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0;
+    }
+}
+
+.message-row.streaming .answer-content>*:last-child::after,
+.message-row.streaming .thinking-content>*:last-child::after,
+.message-row.streaming .answer-content:empty::after,
+.message-row.streaming .thinking-content:empty::after {
+    content: '▋';
+    display: inline-block;
+    vertical-align: baseline;
+    animation: cursor-blink 1s step-end infinite;
+    color: var(--accent-primary);
+    margin-left: 4px;
+    font-size: 0.9em;
 }
 
 /* 
