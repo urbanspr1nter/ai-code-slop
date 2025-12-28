@@ -4,7 +4,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './MessageBubble.css';
 import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronRight, FileText, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 const CodeBlock = ({ language, children, ...props }: any) => {
     const [isCopied, setIsCopied] = useState(false);
@@ -70,7 +70,7 @@ export function MessageBubble({ role, content, stats, onRegenerate, isStreaming,
         }
     };
 
-    const markdownComponents = {
+    const markdownComponents = useMemo(() => ({
         // Override pre to strip the outer container since we handle it in code
         pre: ({ children }: any) => <>{children}</>,
         code({ node, inline, className, children, ...props }: any) {
@@ -101,7 +101,7 @@ export function MessageBubble({ role, content, stats, onRegenerate, isStreaming,
                 );
             }
         }
-    };
+    }), []);
 
     return (
         <div className={`message-row ${role} ${isStreaming ? 'streaming' : ''}`}>
