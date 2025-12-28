@@ -141,6 +141,28 @@
     background-color: rgba(255, 255, 255, 0.02);
 }
 
+/* Animated Elements during Streaming */
+@keyframes element-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.message-row.streaming .markdown-body>p,
+.message-row.streaming .markdown-body>pre,
+.message-row.streaming .markdown-body>ul,
+.message-row.streaming .markdown-body>ol,
+.message-row.streaming .markdown-body>table,
+.message-row.streaming .thinking-content {
+    animation: element-fade-in 0.25s ease-out backwards;
+}
+
 .markdown-body tbody tr:hover {
     background-color: rgba(255, 255, 255, 0.05);
 }
