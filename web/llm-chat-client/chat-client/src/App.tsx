@@ -38,56 +38,6 @@ function App() {
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
-  // Helper to generate title
-  // Helper to generate title
-  const generateTitle = async (userContent: string, aiContent: string) => {
-    try {
-      // Small delay to ensure server is ready for next request
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      const endpoint = `${apiUrl.replace(/\/$/, '')}/chat/completions`;
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer none'
-        },
-        body: JSON.stringify({
-          model: modelName,
-          // Using 'user' role for system instruction often works better with smaller local models
-          // We explicitly ask for NO quotes to reduce post-processing needs
-          messages: [
-            { role: 'user', content: `Generate a short title (3-5 words) for this chat. Return ONLY the title text. No quotes. No prefixes.\n\nUser: ${userContent}\nAI: ${aiContent}` }
-          ],
-          temperature: 0.7, // Keep title generation consistent
-          stream: false
-        })
-      });
-
-      if (!response.ok) throw new Error("Title generation failed status: " + response.status);
-
-      const data = await response.json();
-      let title = data.choices?.[0]?.message?.content?.trim();
-
-      // Post-processing cleanup
-      if (title) {
-        title = title.replace(/^["']|["']$/g, ''); // Remove quotes
-        if (title.length > 50) title = title.substring(0, 50) + "..."; // Cap length
-      }
-
-      // Fallback if model returns empty or fails to generate a valid string
-      if (!title || title.length < 2) {
-        title = userContent.substring(0, 30) + (userContent.length > 30 ? "..." : "");
-      }
-
-      console.log("Generated Title:", title);
-      return title;
-    } catch (e) {
-      console.error("Failed to generate title", e);
-      // Fallback to user message content on error
-      return userContent.substring(0, 30) + (userContent.length > 30 ? "..." : "");
-    }
-  };
 
   // ... (handleNewChat and handleSelectChat remain unchanged, skipping for brevity but assuming they are preserved if I use StartLine/EndLine correctly) ...
   // Actually, I can't skip comfortably with replace_file_content unless I target specific blocks.
@@ -286,22 +236,7 @@ function App() {
         } catch (e) { console.error("Failed to save final", e); }
       }
 
-      // Title Generation (only if first exchange)
-      if (messagesToUse.length === 1 && sessionId) {
-        generateTitle(messagesToUse[0].content, accumulatedContent).then(async (title) => {
-          console.log("Applying generated title:", title);
-          setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title } : s));
-          try {
-            const s = await getSession(sessionId);
-            if (s) {
-              await saveSession({ ...s, title });
-              // Force sync
-              const allSessions = await getSessions();
-              setSessions(allSessions);
-            }
-          } catch (e) { console.error(e); }
-        });
-      }
+      // (Removed Title Generation block)
 
     } catch (error: any) {
       if (error.name === 'AbortError') {
@@ -337,7 +272,7 @@ function App() {
       activeSessionId = Date.now().toString();
       const newSession: ChatSession = {
         id: activeSessionId,
-        title: "New Chat...",
+        title: content.trim().substring(0, 30) + (content.length > 30 ? "..." : ""),
         date: new Date(),
         messages: newMessages
       };
@@ -395,6 +330,14 @@ function App() {
     }
   };
 
+  const handleRenameChat = async (id: string, newTitle: string) => {
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, title: newTitle } : s));
+    const session = await getSession(id);
+    if (session) {
+      await saveSession({ ...session, title: newTitle });
+    }
+  };
+
   return (
     <div className="app-container">
       <Sidebar
@@ -404,6 +347,7 @@ function App() {
         onNewChat={handleNewChat}
         onSelectChat={handleSelectChat}
         onDeleteChat={handleDeleteChat}
+        onRenameChat={handleRenameChat}
         selectedChatId={currentChatId}
         chatHistory={sessions}
         isLoading={isLoading}

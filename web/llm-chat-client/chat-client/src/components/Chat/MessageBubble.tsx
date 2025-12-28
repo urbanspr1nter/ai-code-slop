@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './MessageBubble.css';
-import { User, Bot, Copy, Check, RefreshCw } from 'lucide-react';
+import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
 interface MessageBubbleProps {
@@ -17,6 +17,7 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ role, content, stats, onRegenerate }: MessageBubbleProps) {
     const [isCopied, setIsCopied] = useState(false);
+    const [isThinkingExpanded, setIsThinkingExpanded] = useState(true);
 
     const handleCopy = async () => {
         try {
@@ -41,30 +42,67 @@ export function MessageBubble({ role, content, stats, onRegenerate }: MessageBub
 
                     <div className="markdown-body">
                         {(() => {
-                            // Simple parsing for <think> blocks
-                            // Note: This relies on the model outputting <think>...</think>
-                            // DeepSeek-R1 / Qwen-Thinking models usually do this.
-                            const parts = content.split(/(<think>[\s\S]*?<\/think>)/g);
+                            // Robust parsing for <think> blocks:
+                            // 1. Explicit </think>: content before is thought (implicit start), content after is answer.
+                            // 2. Explicit <think>: content after is thought (streaming).
+                            // 3. No tags: content is answer.
 
-                            return parts.map((part, index) => {
-                                if (part.startsWith('<think>') && part.endsWith('</think>')) {
-                                    const thinkingContent = part.replace(/<\/?think>/g, '').trim();
-                                    return (
-                                        <div key={index} className="thinking-block">
-                                            <div className="thinking-header">
-                                                <span className="thinking-icon">💭</span>
-                                                <span className="thinking-label">Thinking Process</span>
+                            const closeIdx = content.indexOf('</think>');
+                            const openIdx = content.indexOf('<think>');
+
+                            let thought: string | null = null;
+                            let answer: string | null = null;
+
+                            if (closeIdx !== -1) {
+                                // Found closing tag. Everything before is thought.
+                                let rawThought = content.slice(0, closeIdx);
+                                // Clean optional start tag if present
+                                rawThought = rawThought.replace(/<think>/i, '');
+                                thought = rawThought.trim();
+                                answer = content.slice(closeIdx + 8); // length of </think>
+                            } else if (openIdx !== -1) {
+                                // Found open tag, no close. Streaming thought.
+                                // Content before <think> is treated as answer (preamble)
+                                const before = content.slice(0, openIdx);
+                                if (before.trim()) answer = before;
+
+                                thought = content.slice(openIdx + 7).trim(); // length of <think>
+                            } else {
+                                // No tags. Pure answer.
+                                answer = content;
+                            }
+
+                            return (
+                                <>
+                                    {thought && (
+                                        <div className="thinking-block">
+                                            <div
+                                                className="thinking-header clickable"
+                                                onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
+                                                title={isThinkingExpanded ? "Collapse Thought" : "Expand Thought"}
+                                            >
+                                                <div className="thinking-title-group">
+                                                    <span className="thinking-icon">💭</span>
+                                                    <span className="thinking-label">Thinking Process</span>
+                                                </div>
+                                                <div className="thinking-chevron">
+                                                    {isThinkingExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                                </div>
                                             </div>
-                                            <div className="thinking-content">
-                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkingContent}</ReactMarkdown>
-                                            </div>
+                                            {isThinkingExpanded && (
+                                                <div className="thinking-content">
+                                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{thought}</ReactMarkdown>
+                                                </div>
+                                            )}
                                         </div>
-                                    );
-                                }
-                                // Render regular markdown
-                                if (!part.trim()) return null;
-                                return <ReactMarkdown key={index} remarkPlugins={[remarkGfm]}>{part}</ReactMarkdown>;
-                            });
+                                    )}
+                                    {(answer !== null) && (
+                                        <div className="answer-content">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
+                                        </div>
+                                    )}
+                                </>
+                            );
                         })()}
                     </div>
 

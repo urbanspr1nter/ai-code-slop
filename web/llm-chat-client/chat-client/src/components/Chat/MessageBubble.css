@@ -122,7 +122,30 @@
     color: var(--text-muted);
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    user-select: none;
+}
+
+.thinking-header.clickable {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.thinking-header.clickable:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+    color: var(--text-secondary);
+}
+
+.thinking-title-group {
+    display: flex;
+    align-items: center;
     gap: 0.5rem;
+}
+
+.thinking-chevron {
+    display: flex;
+    align-items: center;
+    opacity: 0.6;
 }
 
 .thinking-content {
