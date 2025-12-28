@@ -69,7 +69,8 @@
     margin-bottom: 1em;
 }
 
-.markdown-body pre {
+/* Generic Code Block (non-highlighted) */
+.code-block {
     background: #0d0d0d;
     padding: 16px;
     border-radius: 6px;
@@ -77,6 +78,7 @@
     margin: 1em 0;
 }
 
+/* Inline Code Pill */
 .markdown-body code {
     font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
     font-size: 0.9em;
@@ -85,9 +87,11 @@
     border-radius: 4px;
 }
 
-.markdown-body pre code {
+.code-block code,
+.code-block-wrapper code {
     background-color: transparent;
     padding: 0;
+    border-radius: 0;
 }
 
 .message-stats {
@@ -204,4 +208,35 @@
 
 .copy-text {
     font-weight: 500;
+}
+
+/* Code Block with Header */
+.code-block-wrapper {
+    margin: 1em 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: #1e1e1e;
+    /* Match typical vscDarkPlus bg */
+    border: 1px solid var(--border-subtle);
+}
+
+.code-block-header {
+    background-color: #2d2d2d;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.code-language {
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    font-family: sans-serif;
+    text-transform: uppercase;
+}
+
+/* Override default pre margin since wrapper handles it */
+.code-block-wrapper pre {
+    margin: 0 !important;
 }

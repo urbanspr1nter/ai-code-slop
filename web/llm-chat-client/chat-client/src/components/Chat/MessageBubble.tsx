@@ -1,5 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './MessageBubble.css';
 import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
@@ -26,6 +28,50 @@ export function MessageBubble({ role, content, stats, onRegenerate }: MessageBub
             setTimeout(() => setIsCopied(false), 2000);
         } catch (err) {
             console.error('Failed to copy:', err);
+        }
+    };
+
+    const markdownComponents = {
+        // Override pre to strip the outer container since we handle it in code
+        pre: ({ children }: any) => <>{children}</>,
+        code({ node, inline, className, children, ...props }: any) {
+            const match = /language-(\w+)/.exec(className || '');
+            const language = match ? match[1] : '';
+
+            if (!inline && match) {
+                return (
+                    <div className="code-block-wrapper">
+                        <div className="code-block-header">
+                            <span className="code-language">{language}</span>
+                        </div>
+                        <SyntaxHighlighter
+                            style={vscDarkPlus}
+                            language={language}
+                            PreTag="div"
+                            customStyle={{ margin: 0, borderRadius: '0 0 6px 6px' }}
+                            {...props}
+                        >
+                            {String(children).replace(/\n$/, '')}
+                        </SyntaxHighlighter>
+                    </div>
+                );
+            } else if (!inline) {
+                // Regular code block without language
+                return (
+                    <pre className="code-block">
+                        <code className={className} {...props}>
+                            {children}
+                        </code>
+                    </pre>
+                );
+            } else {
+                // Inline code
+                return (
+                    <code className={className} {...props}>
+                        {children}
+                    </code>
+                );
+            }
         }
     };
 
@@ -91,14 +137,24 @@ export function MessageBubble({ role, content, stats, onRegenerate }: MessageBub
                                             </div>
                                             {isThinkingExpanded && (
                                                 <div className="thinking-content">
-                                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{thought}</ReactMarkdown>
+                                                    <ReactMarkdown
+                                                        remarkPlugins={[remarkGfm]}
+                                                        components={markdownComponents}
+                                                    >
+                                                        {thought}
+                                                    </ReactMarkdown>
                                                 </div>
                                             )}
                                         </div>
                                     )}
                                     {(answer !== null) && (
                                         <div className="answer-content">
-                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkGfm]}
+                                                components={markdownComponents}
+                                            >
+                                                {answer}
+                                            </ReactMarkdown>
                                         </div>
                                     )}
                                 </>
