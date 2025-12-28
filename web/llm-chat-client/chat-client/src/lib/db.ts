@@ -16,9 +16,10 @@ interface ChatSession {
     title: string;
     date: Date;
     messages: Message[];
+    isFavorite?: boolean;
 }
 
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 interface ChatDB extends DBSchema {
     sessions: {
@@ -66,9 +67,27 @@ export async function saveSession(session: ChatSession) {
 
 export async function getSessions(): Promise<ChatSession[]> {
     const db = await dbPromise;
-    // Get all sessions and sort by date descending
     const sessions = await db.getAllFromIndex('sessions', 'by-date');
-    return sessions.reverse();
+
+    // Sort: Favorites first, then Date DESC
+    return sessions.sort((a, b) => {
+        if (!!a.isFavorite === !!b.isFavorite) {
+            // Both fav or both not fav -> sort by date DESC
+            return new Date(b.date).getTime() - new Date(a.date).getTime();
+        }
+        // One is fav -> Fav comes first
+        return a.isFavorite ? -1 : 1;
+    });
+}
+
+export async function toggleFavorite(id: string): Promise<ChatSession | undefined> {
+    const db = await dbPromise;
+    const session = await db.get('sessions', id);
+    if (session) {
+        session.isFavorite = !session.isFavorite;
+        await db.put('sessions', session);
+        return session;
+    }
 }
 
 export async function deleteSession(id: string) {

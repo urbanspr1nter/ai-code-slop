@@ -1,4 +1,4 @@
-import { Plus, MessageSquare, Settings, PanelLeftClose, Trash2, Edit2 } from 'lucide-react';
+import { Plus, MessageSquare, Settings, PanelLeftClose, Trash2, Edit2, Star } from 'lucide-react';
 import './Sidebar.css';
 import { useState } from 'react';
 
@@ -6,6 +6,7 @@ interface ChatSession {
     id: string;
     title: string;
     date: Date;
+    isFavorite?: boolean;
 }
 
 interface SidebarProps {
@@ -16,6 +17,7 @@ interface SidebarProps {
     onSelectChat: (id: string) => void;
     onDeleteChat: (id: string) => void;
     onRenameChat: (id: string, newTitle: string) => void;
+    onToggleFavorite: (id: string) => void;
     selectedChatId: string | null;
     chatHistory: ChatSession[];
     isLoading?: boolean;
@@ -29,6 +31,7 @@ export function Sidebar({
     onSelectChat,
     onDeleteChat,
     onRenameChat,
+    onToggleFavorite,
     selectedChatId,
     chatHistory,
     isLoading
@@ -108,11 +111,26 @@ export function Sidebar({
                                         disabled={isLoading}
                                         style={{ opacity: isLoading && selectedChatId !== chat.id ? 0.5 : 1, cursor: isLoading ? 'not-allowed' : 'pointer' }}
                                     >
-                                        <MessageSquare size={16} />
+                                        {chat.isFavorite ? (
+                                            <Star size={16} fill="currentColor" style={{ flexShrink: 0, color: '#fbbf24' }} />
+                                        ) : (
+                                            <MessageSquare size={16} style={{ flexShrink: 0 }} />
+                                        )}
                                         <span className="text-truncate">{chat.title}</span>
 
                                         {!isLoading && (
                                             <div className="item-actions">
+                                                <div
+                                                    className="action-btn"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onToggleFavorite(chat.id);
+                                                    }}
+                                                    title={chat.isFavorite ? "Unfavorite" : "Favorite"}
+                                                    style={{ color: chat.isFavorite ? '#fbbf24' : 'inherit' }}
+                                                >
+                                                    <Star size={14} fill={chat.isFavorite ? "currentColor" : "none"} />
+                                                </div>
                                                 <div
                                                     className="action-btn edit-btn"
                                                     onClick={(e) => startEdit(e, chat)}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Sidebar } from './components/Layout/Sidebar';
 import { MainChat } from './components/Chat/MainChat';
 import { SettingsModal } from './components/Layout/SettingsModal';
-import { saveSession, getSessions, deleteSession, getSession, saveSettings, getSettings } from './lib/db';
+import { saveSession, getSessions, deleteSession, getSession, saveSettings, getSettings, toggleFavorite } from './lib/db';
 import type { ChatSession, Message } from './lib/db';
 import './App.css';
 
@@ -409,6 +409,19 @@ function App() {
     }
   };
 
+  const handleToggleFavorite = async (id: string) => {
+    setSessions(prev => {
+      const next = prev.map(s => s.id === id ? { ...s, isFavorite: !s.isFavorite } : s);
+      return next.sort((a, b) => {
+        if (!!a.isFavorite === !!b.isFavorite) {
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        }
+        return a.isFavorite ? -1 : 1;
+      });
+    });
+    await toggleFavorite(id);
+  };
+
   const contextTokens = useMemo(() => {
     return messages.reduce((acc, m) => acc + Math.ceil(m.content.length / 4), 0) + Math.ceil((systemPrompt || '').length / 4);
   }, [messages, systemPrompt]);
@@ -423,6 +436,7 @@ function App() {
         onSelectChat={handleSelectChat}
         onDeleteChat={handleDeleteChat}
         onRenameChat={handleRenameChat}
+        onToggleFavorite={handleToggleFavorite}
         selectedChatId={currentChatId}
         chatHistory={sessions}
         isLoading={isLoading}
