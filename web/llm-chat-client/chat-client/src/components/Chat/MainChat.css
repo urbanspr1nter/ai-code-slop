@@ -235,6 +235,7 @@
         top: 0.5rem;
     }
 }
+
 .refresh-models-btn {
     display: flex;
     align-items: center;
@@ -258,4 +259,27 @@
 .refresh-models-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.sidebar-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 8px;
+    margin-right: 8px;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+}
+
+.sidebar-toggle-btn:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+.header-left {
+    display: flex;
+    align-items: center;
 }

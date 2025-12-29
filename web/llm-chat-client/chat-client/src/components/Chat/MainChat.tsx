@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import './MainChat.css';
-import { ArrowDown, ChevronDown, Check, RefreshCw } from 'lucide-react';
+import { ArrowDown, ChevronDown, Check, RefreshCw, PanelLeft } from 'lucide-react';
 import { ImageLightbox } from './ImageLightbox';
 
 interface Message {
@@ -30,6 +30,8 @@ interface MainChatProps {
     onModelSelect?: (model: string) => void;
     availableModels?: string[];
     onRefreshModels?: () => void;
+    isSidebarOpen?: boolean;
+    onToggleSidebar?: () => void;
 }
 
 export function MainChat({
@@ -44,7 +46,9 @@ export function MainChat({
     selectedModel,
     onModelSelect,
     availableModels,
-    onRefreshModels
+    onRefreshModels,
+    isSidebarOpen,
+    onToggleSidebar
 }: MainChatProps) {
     const virtuosoRef = useRef<VirtuosoHandle>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -72,50 +76,61 @@ export function MainChat({
     return (
         <main className="main-chat">
             <header className="chat-header">
-                <div className="model-selector-wrapper" ref={modelMenuRef}>
-                    {availableModels && availableModels.length > 0 ? (
-                        <div className="custom-select-container">
-                            <button
-                                className={`model-trigger ${isModelMenuOpen ? 'active' : ''}`}
-                                onClick={() => !isLoading && setIsModelMenuOpen(!isModelMenuOpen)}
-                                disabled={isLoading}
-                                title="Select LLM Model"
-                            >
-                                <span className="current-model-name">{selectedModel}</span>
-                                <ChevronDown className="select-icon" size={14} />
-                            </button>
-
-                            {isModelMenuOpen && (
-                                <div className="model-dropdown-menu">
-                                    {availableModels.map(m => (
-                                        <button
-                                            key={m}
-                                            className={`model-option ${m === selectedModel ? 'selected' : ''}`}
-                                            onClick={() => {
-                                                onModelSelect?.(m);
-                                                setIsModelMenuOpen(false);
-                                            }}
-                                        >
-                                            {m}
-                                            {m === selectedModel && <Check size={14} className="check-icon" />}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="model-name-static">{selectedModel || 'AI Chat'}</div>
-                    )}
-                    {onRefreshModels && (
+                <div className="header-left">
+                    {!isSidebarOpen && onToggleSidebar && (
                         <button
-                            className="refresh-models-btn"
-                            onClick={onRefreshModels}
-                            title="Refresh Models"
-                            disabled={isLoading}
+                            className="sidebar-toggle-btn"
+                            onClick={onToggleSidebar}
+                            title="Open Sidebar"
                         >
-                            <RefreshCw size={14} />
+                            <PanelLeft size={20} />
                         </button>
                     )}
+                    <div className="model-selector-wrapper" ref={modelMenuRef}>
+                        {availableModels && availableModels.length > 0 ? (
+                            <div className="custom-select-container">
+                                <button
+                                    className={`model-trigger ${isModelMenuOpen ? 'active' : ''}`}
+                                    onClick={() => !isLoading && setIsModelMenuOpen(!isModelMenuOpen)}
+                                    disabled={isLoading}
+                                    title="Select LLM Model"
+                                >
+                                    <span className="current-model-name">{selectedModel}</span>
+                                    <ChevronDown className="select-icon" size={14} />
+                                </button>
+
+                                {isModelMenuOpen && (
+                                    <div className="model-dropdown-menu">
+                                        {availableModels.map(m => (
+                                            <button
+                                                key={m}
+                                                className={`model-option ${m === selectedModel ? 'selected' : ''}`}
+                                                onClick={() => {
+                                                    onModelSelect?.(m);
+                                                    setIsModelMenuOpen(false);
+                                                }}
+                                            >
+                                                {m}
+                                                {m === selectedModel && <Check size={14} className="check-icon" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="model-name-static">{selectedModel || 'AI Chat'}</div>
+                        )}
+                        {onRefreshModels && (
+                            <button
+                                className="refresh-models-btn"
+                                onClick={onRefreshModels}
+                                title="Refresh Models"
+                                disabled={isLoading}
+                            >
+                                <RefreshCw size={14} />
+                            </button>
+                        )}
+                    </div>
                 </div>
                 {contextTokens !== undefined && contextTokens > 0 && (
                     <div className="header-token-badge">
