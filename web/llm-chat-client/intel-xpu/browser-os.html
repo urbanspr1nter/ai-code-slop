@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mini Browser‑Based OS – Full Feature Set</title>
+<style>
+  /* ---------- Reset & Layout ---------- */
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;font-family:Arial,Helvetica,sans-serif;}
+  body{overflow:hidden;background:#1e1e1e;color:#f0f0f0;}
+
+  /* ---------- Desktop with desaturated wallpaper ---------- */
+  #desktop{
+    position:relative;
+    width:100%;height:100%;
+    padding-bottom:40px; /* space for taskbar */
+    overflow:hidden;
+  }
+  #desktop::before{
+    content:"";
+    position:absolute;
+    top:0;left:0;right:0;bottom:0;
+    background:url('https://wallpaperaccess.com/full/284553.jpg') center/cover no-repeat;
+    filter:grayscale(0.6) brightness(0.7);
+    pointer-events:none;
+    z-index:-1;
+  }
+  #desktop .icon{
+    width:80px;cursor:pointer;
+    text-align:center;margin:10px;
+    display:inline-block;
+  }
+  #desktop .icon span{display:block;margin-top:5px;font-size:12px;}
+  #desktop .icon .icon-img{font-size:48px;}
+
+  /* ---------- Window ---------- */
+  .window{
+    position:absolute;min-width:200px;min-height:150px;
+    background:rgba(255,255,255,.95);
+    border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.4);
+    display:flex;flex-direction:column;
+    z-index:10;
+  }
+  .window .titlebar{
+    background:#4a90e2;color:#fff;
+    padding:6px 10px;cursor:move;display:flex;justify-content:space-between;align-items:center;
+    border-top-left-radius:6px;border-top-right-radius:6px;
+  }
+  .window .title{font-weight:bold;}
+  .control-buttons{display:flex;gap:4px;}
+  .control-buttons div{
+    width:18px;height:18px;text-align:center;line-height:18px;border-radius:3px;
+    cursor:pointer;user-select:none;
+  }
+  .control-buttons .minimize{background:#ffbd4c;color:#000;}
+  .control-buttons .maximize{background:#4cd137;color:#fff;}
+  .control-buttons .close{background:#ff5c5c;color:#fff;}
+  .window .content{flex:1;overflow:auto;padding:10px;}
+  .window .resize-handle{
+    position:absolute;
+    right:0;bottom:0;
+    width:12px;height:12px;
+    cursor:se-resize;
+    background:transparent;
+  }
+
+  /* ---------- Taskbar ---------- */
+  #taskbar{
+    position:absolute;bottom:0;left:0;right:0;height:40px;background:#2c3e50;
+    display:flex;align-items:center;box-shadow:0 -2px 6px rgba(0,0,0,.5);
+  }
+  #start-button{
+    width:80px;height:100%;background:#4a90e2;color:#fff;font-weight:bold;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  #taskbar-items{flex:1;display:flex;align-items:center;overflow:auto;}
+  #taskbar-items .task{
+    padding:0 10px;height:100%;display:flex;align-items:center;cursor:pointer;
+  }
+  #taskbar-items .task.active{background:#5e9bfc;}
+  #taskbar-items .task.minimized{background:#3c3c3c;}
+
+  /* ---------- Start menu ---------- */
+  #start-menu{
+    position:absolute;bottom:40px;left:0;background:#fff;color:#000;
+    width:200px;box-shadow:0 -2px 6px rgba(0,0,0,.4);
+    display:none;flex-direction:column;
+  }
+  #start-menu .item{
+    padding:8px 12px;cursor:pointer;border-bottom:1px solid #ddd;
+  }
+  #start-menu .item:hover{background:#e6e6e6;}
+</style>
+</head>
+<body>
+<div id="desktop">
+  <!-- Desktop icons -->
+  <div class="icon" data-app="notepad">
+    <span class="icon-img">📝</span>
+    <span class="icon-label">Notepad</span>
+  </div>
+  <div class="icon" data-app="browser">
+    <span class="icon-img">🌐</span>
+    <span class="icon-label">Browser</span>
+  </div>
+  <div class="icon" data-app="calculator">
+    <span class="icon-img">🧮</span>
+    <span class="icon-label">Calculator</span>
+  </div>
+  <div class="icon" data-app="clock">
+    <span class="icon-img">⏰</span>
+    <span class="icon-label">Clock</span>
+  </div>
+  <div class="icon" data-app="terminal">
+    <span class="icon-img">⌨️</span>
+    <span class="icon-label">Terminal</span>
+  </div>
+  <div class="icon" data-app="snake">
+    <span class="icon-img">🐍</span>
+    <span class="icon-label">Snake</span>
+  </div>
+</div>
+
+<!-- Taskbar -->
+<div id="taskbar">
+  <div id="start-button">Start</div>
+  <div id="taskbar-items"></div>
+</div>
+
+<!-- Start menu -->
+<div id="start-menu">
+  <div class="item" data-app="notepad">Notepad</div>
+  <div class="item" data-app="browser">Browser</div>
+  <div class="item" data-app="calculator">Calculator</div>
+  <div class="item" data-app="clock">Clock</div>
+  <div class="item" data-app="terminal">Terminal</div>
+  <div class="item" data-app="snake">Snake</div>
+</div>
+
+<script>
+/* ---------- Utility ---------- */
+function createElement(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  for (let k in attrs) {
+    if (k === 'style') Object.assign(el.style, attrs[k]);
+    else if (k === 'class') el.className = attrs[k];
+    else if (k.startsWith('on') && typeof attrs[k] === 'function')
+      el.addEventListener(k.substring(2).toLowerCase(), attrs[k]);
+    else el.setAttribute(k, attrs[k]);
+  }
+  children.forEach(c => {
+    if (typeof c === 'string') el.appendChild(document.createTextNode(c));
+    else if (c instanceof Node) el.appendChild(c);
+  });
+  return el;
+}
+
+/* ---------- Window management ---------- */
+let zIndexCounter = 1;
+const windows = {}; // id -> {app, win, data}
+
+function bringToFront(id) {
+  const winData = windows[id];
+  if (!winData) return;
+  const {win} = winData;
+  win.style.display = 'block';
+  win.style.zIndex = ++zIndexCounter;
+  // activate taskbar item
+  document.querySelectorAll('#taskbar-items .task').forEach(t=>t.classList.remove('active'));
+  const task = document.querySelector(`#taskbar-items .task[data-id="${id}"]`);
+  if (task) {
+    task.classList.add('active');
+    task.classList.remove('minimized');
+  }
+}
+
+function minimizeWindow(id) {
+  const winData = windows[id];
+  if (!winData) return;
+  const {win} = winData;
+  win.style.display = 'none';
+  const task = document.querySelector(`#taskbar-items .task[data-id="${id}"]`);
+  if (task) task.classList.add('minimized');
+}
+
+function maximizeWindow(id) {
+  const winData = windows[id];
+  if (!winData) return;
+  const {win, data} = winData;
+  if (!data.isMaximized) {
+    data.rect = {top:win.offsetTop, left:win.offsetLeft, width:win.offsetWidth, height:win.offsetHeight};
+    win.style.top = '0';
+    win.style.left = '0';
+    win.style.width = '100%';
+    win.style.height = `calc(100% - 40px)`; // leave taskbar
+    data.isMaximized = true;
+  } else {
+    const r = data.rect;
+    win.style.top = r.top + 'px';
+    win.style.left = r.left + 'px';
+    win.style.width = r.width + 'px';
+    win.style.height = r.height + 'px';
+    data.isMaximized = false;
+  }
+}
+
+function closeWindow(id) {
+  const winData = windows[id];
+  if (!winData) return;
+  const {win} = winData;
+  // cleanup game interval if present
+  if (win.firstChild && typeof win.firstChild.cleanup === 'function') {
+    win.firstChild.cleanup();
+  }
+  win.remove();
+  delete windows[id];
+  const task = document.querySelector(`#taskbar-items .task[data-id="${id}"]`);
+  if (task) task.remove();
+}
+
+/* ---------- App content generators ---------- */
+function createNotepad() {
+  const textarea = createElement('textarea', {
+    style:{
+      width:'100%',height:'100%',border:'none',outline:'none',
+      background:'transparent',fontSize:'14px',fontFamily:'inherit'
+    }
+  });
+  return textarea;
+}
+
+function createBrowser() {
+  const iframe = createElement('iframe', {
+    src:'https://duckduckgo.com',
+    style:{width:'100%',height:'100%',border:'none'}
+  });
+  return iframe;
+}
+
+function createCalculator() {
+  const display = createElement('input', {
+    type:'text',
+    readonly:true,
+    style:{
+      width:'100%',height:'40px',marginBottom:'10px',fontSize:'20px',
+      textAlign:'right',padding:'5px',boxSizing:'border-box',
+      background:'#f0f0f0',border:'1px solid #ccc'
+    }
+  });
+
+  const btns = [
+    ['7','8','9','/'],
+    ['4','5','6','*'],
+    ['1','2','3','-'],
+    ['0','.','C','+'],
+    ['=']
+  ];
+
+  const grid = createElement('div', {style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'5px'}});
+  btns.forEach(row => {
+    row.forEach(val => {
+      const btn = createElement('button', {
+        style:{
+          padding:'10px',fontSize:'16px',cursor:'pointer',
+          background:'#fff',border:'1px solid #ccc',borderRadius:'3px'
+        },
+        onClick:()=>handleCalc(val, display)
+      }, val);
+      grid.appendChild(btn);
+    });
+  });
+
+  return createElement('div', {}, display, grid);
+}
+
+function handleCalc(val, display) {
+  if (val === 'C') {
+    display.value = '';
+  } else if (val === '=') {
+    try {
+      display.value = eval(display.value);
+    } catch {
+      display.value = 'Error';
+    }
+  } else {
+    display.value += val;
+  }
+}
+
+function createClock() {
+  const clock = createElement('div', {
+    style:{
+      width:'100%',height:'100%',display:'flex',alignItems:'center',
+      justifyContent:'center',fontSize:'48px',fontWeight:'bold'
+    }
+  });
+  function tick() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2,'0');
+    const mm = String(now.getMinutes()).padStart(2,'0');
+    const ss = String(now.getSeconds()).padStart(2,'0');
+    clock.textContent = `${hh}:${mm}:${ss}`;
+  }
+  tick();
+  setInterval(tick, 1000);
+  return clock;
+}
+
+function createTerminal() {
+  const container = createElement('div', {style:{height:'100%',display:'flex',flexDirection:'column',background:'#000',color:'#0f0',fontFamily:'monospace',fontSize:'14px',padding:'10px',overflow:'hidden'}});
+  const output = createElement('div', {style:{flex:'1',overflowY:'auto',whiteSpace:'pre-wrap'}});
+  const form = createElement('form', {style:{display:'flex'}});
+  const prompt = createElement('span', {style:{marginRight:'5px'}}, '$');
+  const input = createElement('input', {type:'text',style:{flex:'1',background:'#000',color:'#0f0',border:'none',outline:'none',fontFamily:'monospace',fontSize:'14px'}});
+  form.append(prompt, input);
+  container.append(output, form);
+
+  form.addEventListener('submit', e=>{
+    e.preventDefault();
+    const cmd = input.value.trim();
+    if (!cmd) return;
+    output.appendChild(createElement('div', {}, `$ ${cmd}`));
+    runCommand(cmd, output);
+    input.value = '';
+  });
+
+  return container;
+}
+
+function runCommand(cmd, output) {
+  const parts = cmd.split(/\s+/);
+  const cmdName = parts[0];
+  const args = parts.slice(1);
+  switch(cmdName){
+    case 'help':
+      output.appendChild(createElement('div', {}, 'Available commands: help, date, clear, echo, calc, whoami'));
+      break;
+    case 'date':
+      output.appendChild(createElement('div', {}, new Date().toString()));
+      break;
+    case 'clear':
+      output.innerHTML = '';
+      break;
+    case 'echo':
+      output.appendChild(createElement('div', {}, args.join(' ')));
+      break;
+    case 'calc':
+      try {
+        const res = eval(args.join(' '));
+        output.appendChild(createElement('div', {}, res));
+      } catch (e) {
+        output.appendChild(createElement('div', {}, 'Error in expression'));
+      }
+      break;
+    case 'whoami':
+      output.appendChild(createElement('div', {}, 'mini-os-user'));
+      break;
+    default:
+      output.appendChild(createElement('div', {}, `command not found: ${cmdName}`));
+  }
+}
+
+function createSnakeGame() {
+  const container = createElement('div', {style:{position:'relative',width:'420px',height:'460px',margin:'auto'}});
+  const canvas = createElement('canvas', {width:400,height:400,style:{display:'block',margin:'0 auto',background:'#222'}});
+  const info = createElement('div', {style:{color:'#fff',textAlign:'center',marginTop:'5px'}});
+  container.append(canvas, info);
+  const ctx = canvas.getContext('2d');
+  const cellSize = 20;
+  const cols = canvas.width / cellSize;
+  const rows = canvas.height / cellSize;
+  let snake = [[10,10],[9,10],[8,10]];
+  let direction = 'right';
+  let food = null;
+  let score = 0;
+  let gameOver = false;
+  let intervalId;
+  let keyHandler = e=>{
+    if (e.key === 'ArrowUp' && direction !== 'down') direction = 'up';
+    else if (e.key === 'ArrowDown' && direction !== 'up') direction = 'down';
+    else if (e.key === 'ArrowLeft' && direction !== 'right') direction = 'left';
+    else if (e.key === 'ArrowRight' && direction !== 'left') direction = 'right';
+  };
+  document.addEventListener('keydown',keyHandler);
+
+  function placeFood(){
+    let fx, fy;
+    do{
+      fx = Math.floor(Math.random()*cols);
+      fy = Math.floor(Math.random()*rows);
+    }while(snake.some(seg=>seg[0]===fx && seg[1]===fy));
+    food = [fx,fy];
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    // draw snake
+    ctx.fillStyle = '#0f0';
+    snake.forEach(seg=>{
+      ctx.fillRect(seg[0]*cellSize, seg[1]*cellSize, cellSize-1, cellSize-1);
+    });
+    // draw food
+    if(food){
+      ctx.fillStyle = '#f00';
+      ctx.fillRect(food[0]*cellSize, food[1]*cellSize, cellSize-1, cellSize-1);
+    }
+  }
+
+  function step(){
+    if(gameOver) return;
+    const head = snake[0];
+    let newHead;
+    if(direction==='up') newHead = [head[0], head[1]-1];
+    else if(direction==='down') newHead = [head[0], head[1]+1];
+    else if(direction==='left') newHead = [head[0]-1, head[1]];
+    else if(direction==='right') newHead = [head[0]+1, head[1]];
+
+    // collision with walls
+    if(newHead[0] < 0 || newHead[0] >= cols || newHead[1] < 0 || newHead[1] >= rows){
+      gameOver = true;
+    }
+    // collision with self
+    if(snake.some(seg=>seg[0]===newHead[0] && seg[1]===newHead[1])){
+      gameOver = true;
+    }
+    if(gameOver){
+      clearInterval(intervalId);
+      info.textContent = `Game Over! Score: ${score}`;
+      return;
+    }
+
+    snake.unshift(newHead);
+    // eat food
+    if(food && newHead[0]===food[0] && newHead[1]===food[1]){
+      score++;
+      placeFood();
+    }else{
+      snake.pop();
+    }
+    info.textContent = `Score: ${score}`;
+    draw();
+  }
+
+  placeFood();
+  draw();
+  intervalId = setInterval(step,200);
+
+  container.cleanup = () => {
+    clearInterval(intervalId);
+    document.removeEventListener('keydown',keyHandler);
+  };
+
+  return container;
+}
+
+/* ---------- Window creation ---------- */
+function openWindow(appName, title, content) {
+  const id = 'win_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+  const win = createElement('div', {class:'window', style:{top:'100px', left:'100px'}});
+  const titlebar = createElement('div', {class:'titlebar'});
+  titlebar.append(
+    createElement('div', {class:'title'}, title),
+    createElement('div', {class:'control-buttons'}, 
+      createElement('div', {class:'minimize', onClick:()=>minimizeWindow(id)}, '–'),
+      createElement('div', {class:'maximize', onClick:()=>maximizeWindow(id)}, '☐'),
+      createElement('div', {class:'close', onClick:()=>closeWindow(id)}, '✕')
+    )
+  );
+  const body = createElement('div', {class:'content'}, content);
+  const resize = createElement('div', {class:'resize-handle'});
+  win.append(titlebar, body, resize);
+  document.body.appendChild(win);
+
+  /* Bring to front on any mousedown inside the window */
+  win.addEventListener('mousedown',()=>bringToFront(id));
+
+  /* Dragging */
+  let isDragging = false, offsetX, offsetY;
+  titlebar.onmousedown = e => {
+    if (e.target.closest('.control-buttons')) return; // ignore control buttons
+    isDragging = true;
+    offsetX = e.clientX - win.offsetLeft;
+    offsetY = e.clientY - win.offsetTop;
+    document.onmousemove = move;
+    document.onmouseup = () => { isDragging = false; document.onmousemove = null; document.onmouseup = null; };
+  };
+  function move(e){
+    if (!isDragging) return;
+    win.style.left = (e.clientX - offsetX) + 'px';
+    win.style.top = (e.clientY - offsetY) + 'px';
+  }
+
+  /* Resizing */
+  let isResizing = false, startX, startY, startW, startH;
+  resize.onmousedown = e => {
+    e.stopPropagation();
+    isResizing = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startW = win.offsetWidth;
+    startH = win.offsetHeight;
+    document.onmousemove = resizeMove;
+    document.onmouseup = () => { isResizing = false; document.onmousemove = null; document.onmouseup = null; };
+  };
+  function resizeMove(e){
+    if (!isResizing) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    win.style.width = Math.max(200, startW + dx) + 'px';
+    win.style.height = Math.max(150, startH + dy) + 'px';
+  }
+
+  /* Taskbar item */
+  const task = createElement('div', {class:'task', 'data-id':id, onClick:()=>bringToFront(id)}, title);
+  document.getElementById('taskbar-items').appendChild(task);
+
+  windows[id] = {app:appName, win, data:{isMaximized:false}};
+  bringToFront(id);
+}
+
+/* ---------- Icon click handling ---------- */
+document.querySelectorAll('.icon').forEach(icon=>{
+  icon.addEventListener('dblclick', ()=> {
+    const app = icon.dataset.app;
+    switch(app){
+      case 'notepad': openWindow('notepad','Notepad', createNotepad()); break;
+      case 'browser': openWindow('browser','Browser', createBrowser()); break;
+      case 'calculator': openWindow('calculator','Calculator', createCalculator()); break;
+      case 'clock': openWindow('clock','Clock', createClock()); break;
+      case 'terminal': openWindow('terminal','Terminal', createTerminal()); break;
+      case 'snake': openWindow('snake','Snake', createSnakeGame()); break;
+    }
+  });
+});
+
+/* ---------- Start menu handling ---------- */
+const startBtn=document.getElementById('start-button');
+const startMenu=document.getElementById('start-menu');
+startBtn.addEventListener('click',()=>{ startMenu.style.display = startMenu.style.display==='flex'?'none':'flex'; });
+document.addEventListener('click',e=>{
+  if(!startMenu.contains(e.target) && e.target!==startBtn) startMenu.style.display='none';
+});
+document.querySelectorAll('#start-menu .item').forEach(item=>{
+  item.addEventListener('click',()=>{
+    const app = item.dataset.app;
+    switch(app){
+      case 'notepad': openWindow('notepad','Notepad', createNotepad()); break;
+      case 'browser': openWindow('browser','Browser', createBrowser()); break;
+      case 'calculator': openWindow('calculator','Calculator', createCalculator()); break;
+      case 'clock': openWindow('clock','Clock', createClock()); break;
+      case 'terminal': openWindow('terminal','Terminal', createTerminal()); break;
+      case 'snake': openWindow('snake','Snake', createSnakeGame()); break;
+    }
+    startMenu.style.display='none';
+  });
+});
+</script>
+</body>
+</html>
