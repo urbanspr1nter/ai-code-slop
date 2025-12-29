@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import './MainChat.css';
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown, ChevronDown, Check, RefreshCw } from 'lucide-react';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -24,12 +24,43 @@ interface MainChatProps {
     onRegenerate?: () => void;
     contextTokens?: number;
     onDeleteMessage?: (index: number) => void;
+    selectedModel?: string;
+    onModelSelect?: (model: string) => void;
+    availableModels?: string[];
+    onRefreshModels?: () => void;
 }
 
-export function MainChat({ messages, onSendMessage, isLoading, chatId, onStop, onRegenerate, contextTokens, onDeleteMessage }: MainChatProps) {
+export function MainChat({
+    messages,
+    onSendMessage,
+    isLoading,
+    chatId,
+    onStop,
+    onRegenerate,
+    contextTokens,
+    onDeleteMessage,
+    selectedModel,
+    onModelSelect,
+    availableModels,
+    onRefreshModels
+}: MainChatProps) {
     const virtuosoRef = useRef<VirtuosoHandle>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [atBottom, setAtBottom] = useState(true);
+    const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+    const modelMenuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (modelMenuRef.current && !modelMenuRef.current.contains(event.target as Node)) {
+                setIsModelMenuOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
 
     const scrollToBottom = () => {
         virtuosoRef.current?.scrollToIndex({ index: messages.length, align: 'end', behavior: 'smooth' });
@@ -37,11 +68,58 @@ export function MainChat({ messages, onSendMessage, isLoading, chatId, onStop, o
 
     return (
         <main className="main-chat">
-            {contextTokens !== undefined && contextTokens > 0 && (
-                <div className="context-token-badge">
-                    Ctx: {contextTokens.toLocaleString()}
+            <header className="chat-header">
+                <div className="model-selector-wrapper" ref={modelMenuRef}>
+                    {availableModels && availableModels.length > 0 ? (
+                        <div className="custom-select-container">
+                            <button
+                                className={`model-trigger ${isModelMenuOpen ? 'active' : ''}`}
+                                onClick={() => !isLoading && setIsModelMenuOpen(!isModelMenuOpen)}
+                                disabled={isLoading}
+                                title="Select LLM Model"
+                            >
+                                <span className="current-model-name">{selectedModel}</span>
+                                <ChevronDown className="select-icon" size={14} />
+                            </button>
+
+                            {isModelMenuOpen && (
+                                <div className="model-dropdown-menu">
+                                    {availableModels.map(m => (
+                                        <button
+                                            key={m}
+                                            className={`model-option ${m === selectedModel ? 'selected' : ''}`}
+                                            onClick={() => {
+                                                onModelSelect?.(m);
+                                                setIsModelMenuOpen(false);
+                                            }}
+                                        >
+                                            {m}
+                                            {m === selectedModel && <Check size={14} className="check-icon" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="model-name-static">{selectedModel || 'AI Chat'}</div>
+                    )}
+                    {onRefreshModels && (
+                        <button
+                            className="refresh-models-btn"
+                            onClick={onRefreshModels}
+                            title="Refresh Models"
+                            disabled={isLoading}
+                        >
+                            <RefreshCw size={14} />
+                        </button>
+                    )}
                 </div>
-            )}
+                {contextTokens !== undefined && contextTokens > 0 && (
+                    <div className="header-token-badge">
+                        Ctx: {contextTokens.toLocaleString()}
+                    </div>
+                )}
+            </header>
 
             {messages.length === 0 ? (
                 <div className="messages-scroll-area">

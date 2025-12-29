@@ -65,15 +65,6 @@ export function SettingsModal({
                         </p>
                     </div>
 
-                    <div className="form-group">
-                        <label>Model Name</label>
-                        <input
-                            type="text"
-                            value={model}
-                            onChange={(e) => setModel(e.target.value)}
-                            placeholder="gpt-3.5-turbo"
-                        />
-                    </div>
 
                     <div className="form-group">
                         <label>System Prompt</label>

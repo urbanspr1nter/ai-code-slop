@@ -26,6 +26,35 @@ function App() {
   const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.');
   const [temperature, setTemperature] = useState(0.7);
 
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+
+  const fetchModels = async () => {
+    try {
+      const url = apiUrl.replace(/\/$/, '') + '/models';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.data && Array.isArray(data.data)) {
+          const loadedModels = data.data.map((m: any) => m.id);
+          setAvailableModels(loadedModels);
+
+          // If current model is not in the new list, switch to the first available one
+          if (loadedModels.length > 0 && !loadedModels.includes(modelName)) {
+            const newDefault = loadedModels[0];
+            setModelName(newDefault);
+            saveSettings({ apiUrl, modelName: newDefault, systemPrompt, temperature });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch models:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (apiUrl) fetchModels();
+  }, [apiUrl]);
+
   // Load history and settings on mount
   useEffect(() => {
     const loadData = async () => {
@@ -456,6 +485,13 @@ function App() {
           onRegenerate={handleRegenerate}
           contextTokens={contextTokens}
           onDeleteMessage={handleDeleteMessage}
+          selectedModel={modelName}
+          availableModels={availableModels}
+          onRefreshModels={fetchModels}
+          onModelSelect={(newModel) => {
+            setModelName(newModel);
+            saveSettings({ apiUrl, modelName: newModel, systemPrompt, temperature });
+          }}
         />
       </div>
 
