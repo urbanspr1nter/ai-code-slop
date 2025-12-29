@@ -46,8 +46,10 @@ const CodeBlock = ({ language, children, ...props }: any) => {
 };
 
 interface MessageBubbleProps {
-    role: 'user' | 'assistant';
+    role: 'user' | 'assistant' | 'system';
     content: string;
+    images?: string[];
+    onImageClick?: (src: string) => void;
     stats?: {
         tokensPerSecond: number;
         totalTokens: number;
@@ -58,7 +60,7 @@ interface MessageBubbleProps {
     onDelete?: () => void;
 }
 
-export function MessageBubble({ role, content, stats, onRegenerate, isStreaming, onDelete }: MessageBubbleProps) {
+export function MessageBubble({ role, content, images, onImageClick, stats, onRegenerate, isStreaming, onDelete }: MessageBubbleProps) {
     const [isCopied, setIsCopied] = useState(false);
     const [isThinkingExpanded, setIsThinkingExpanded] = useState(true);
     const [showRaw, setShowRaw] = useState(false);
@@ -113,6 +115,20 @@ export function MessageBubble({ role, content, stats, onRegenerate, isStreaming,
                     {role === 'user' ? <User size={20} /> : <Bot size={20} />}
                 </div>
                 <div className="message-content">
+                    {images && images.length > 0 && (
+                        <div className="message-images-grid">
+                            {images.map((img, idx) => (
+                                <img
+                                    key={idx}
+                                    src={img}
+                                    alt="Uploaded content"
+                                    className="message-uploaded-image"
+                                    onClick={() => onImageClick?.(img)}
+                                    style={onImageClick ? { cursor: 'pointer' } : undefined}
+                                />
+                            ))}
+                        </div>
+                    )}
                     <div className="message-header-actions">
                         {/* Optional alignment wrapper if needed, but absolute positioning is easier */}
                     </div>

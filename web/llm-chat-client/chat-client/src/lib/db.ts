@@ -2,8 +2,9 @@ import { openDB } from 'idb';
 import type { DBSchema } from 'idb';
 
 interface Message {
-    role: 'user' | 'assistant';
+    role: 'user' | 'assistant' | 'system';
     content: string;
+    images?: string[];
     stats?: {
         tokensPerSecond: number;
         totalTokens: number;

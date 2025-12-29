@@ -4,10 +4,12 @@ import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import './MainChat.css';
 import { ArrowDown, ChevronDown, Check, RefreshCw } from 'lucide-react';
+import { ImageLightbox } from './ImageLightbox';
 
 interface Message {
-    role: 'user' | 'assistant';
+    role: 'user' | 'assistant' | 'system';
     content: string;
+    images?: string[];
     stats?: {
         tokensPerSecond: number;
         totalTokens: number;
@@ -48,6 +50,7 @@ export function MainChat({
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [atBottom, setAtBottom] = useState(true);
     const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+    const [lightboxImage, setLightboxImage] = useState<string | null>(null);
     const modelMenuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -143,6 +146,8 @@ export function MainChat({
                             key={index}
                             role={msg.role}
                             content={msg.content}
+                            images={msg.images}
+                            onImageClick={setLightboxImage}
                             stats={msg.stats}
                             isStreaming={isLoading && index === messages.length - 1 && msg.role === 'assistant'}
                             onRegenerate={
@@ -192,6 +197,13 @@ export function MainChat({
                     onStop={onStop}
                 />
             </div>
+
+            {lightboxImage && (
+                <ImageLightbox
+                    src={lightboxImage}
+                    onClose={() => setLightboxImage(null)}
+                />
+            )}
         </main>
     );
 }

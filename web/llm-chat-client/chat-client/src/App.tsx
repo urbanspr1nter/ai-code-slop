@@ -168,9 +168,23 @@ function App() {
         body: JSON.stringify({
           model: modelName,
           messages: [
-            ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+            ...(systemPrompt ? [{ role: 'system', content: systemPrompt } as Message] : []),
             ...messagesToUse
-          ].map(({ role, content }) => ({ role, content })),
+          ].map((msg) => {
+            if (msg.role === 'user' && msg.images && msg.images.length > 0) {
+              return {
+                role: 'user',
+                content: [
+                  { type: 'text', text: msg.content },
+                  ...msg.images.map(img => ({
+                    type: 'image_url',
+                    image_url: { url: img }
+                  }))
+                ]
+              };
+            }
+            return { role: msg.role, content: msg.content };
+          }),
           temperature: temperature,
           stream: true
         }),
@@ -348,8 +362,8 @@ function App() {
     }
   };
 
-  const handleSendMessage = async (content: string) => {
-    const userMsg: Message = { role: 'user', content };
+  const handleSendMessage = async (content: string, images?: string[]) => {
+    const userMsg: Message = { role: 'user', content, images };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages); // UI update
 
