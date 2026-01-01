@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -205,7 +206,7 @@ export function MessageBubble({ role, content, images, onImageClick, stats, onRe
                                                     <div className="thinking-content">
                                                         {!showPlaceholder ? (
                                                             <ReactMarkdown
-                                                                remarkPlugins={[remarkGfm, remarkMath]}
+                                                                remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
                                                                 rehypePlugins={[rehypeKatex]}
                                                                 components={markdownComponents}
                                                             >
@@ -221,7 +222,7 @@ export function MessageBubble({ role, content, images, onImageClick, stats, onRe
                                         {(answer !== null) && (
                                             <div className="answer-content">
                                                 <ReactMarkdown
-                                                    remarkPlugins={[remarkGfm, remarkMath]}
+                                                    remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
                                                     rehypePlugins={[rehypeKatex]}
                                                     components={markdownComponents}
                                                 >
