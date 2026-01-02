@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown';
+import { copyToClipboard } from '../../lib/clipboard';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import remarkBreaks from 'remark-breaks';
@@ -14,13 +15,11 @@ const CodeBlock = ({ language, children, ...props }: any) => {
     const [isCopied, setIsCopied] = useState(false);
 
     const handleCopy = async () => {
-        const text = String(children).replace(/\n$/, '');
-        try {
-            await navigator.clipboard.writeText(text);
+        const text = String(Array.isArray(children) ? children.join('') : children).replace(/\n$/, '');
+        const success = await copyToClipboard(text);
+        if (success) {
             setIsCopied(true);
             setTimeout(() => setIsCopied(false), 2000);
-        } catch (err) {
-            console.error('Failed to copy code:', err);
         }
     };
 
@@ -40,7 +39,7 @@ const CodeBlock = ({ language, children, ...props }: any) => {
                 customStyle={{ margin: 0, borderRadius: '0 0 6px 6px' }}
                 {...props}
             >
-                {String(children).replace(/\n$/, '')}
+                {String(Array.isArray(children) ? children.join('') : children).replace(/\n$/, '')}
             </SyntaxHighlighter>
         </div>
     );
@@ -67,12 +66,10 @@ export function MessageBubble({ role, content, images, onImageClick, stats, onRe
     const [showRaw, setShowRaw] = useState(false);
 
     const handleCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(content);
+        const success = await copyToClipboard(content);
+        if (success) {
             setIsCopied(true);
             setTimeout(() => setIsCopied(false), 2000);
-        } catch (err) {
-            console.error('Failed to copy:', err);
         }
     };
 
