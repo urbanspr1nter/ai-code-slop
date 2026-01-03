@@ -9,11 +9,78 @@ interface ExportFile {
 
 const EXPORT_VERSION = 1;
 
+// Helper to convert internal Message to OpenAI-compatible format
+function toOpenAIFormat(session: ChatSession): any {
+    const messages = session.messages.map(msg => {
+        // If no images, return as is (but remove internal stats if strictly needed, though keeping them might be useful)
+        if (!msg.images || msg.images.length === 0) {
+            const { images, ...rest } = msg;
+            return rest;
+        }
+
+        // If images exist, convert content to array format
+        return {
+            role: msg.role,
+            content: [
+                { type: 'text', text: msg.content },
+                ...msg.images.map(img => ({
+                    type: 'image_url',
+                    image_url: { url: img }
+                }))
+            ],
+            // Preserve stats if needed, or remove
+            stats: msg.stats
+        };
+    });
+
+    return {
+        ...session,
+        messages
+    };
+}
+
+// Helper to convert OpenAI-compatible format back to internal Message
+function fromOpenAIFormat(session: any): ChatSession {
+    const messages = session.messages.map((msg: any) => {
+        // If content is string, it's standard or legacy internal
+        if (typeof msg.content === 'string') {
+            return msg;
+        }
+
+        // If content is array (OpenAI Multimodal format)
+        if (Array.isArray(msg.content)) {
+            let textContent = '';
+            const images: string[] = [];
+
+            msg.content.forEach((part: any) => {
+                if (part.type === 'text') {
+                    textContent += part.text;
+                } else if (part.type === 'image_url') {
+                    images.push(part.image_url.url);
+                }
+            });
+
+            return {
+                ...msg,
+                content: textContent,
+                images: images.length > 0 ? images : undefined
+            };
+        }
+
+        return msg;
+    });
+
+    return {
+        ...session,
+        messages
+    };
+}
+
 export function exportChat(session: ChatSession) {
     const exportData: ExportFile = {
         version: EXPORT_VERSION,
         type: 'ai-chat-export',
-        data: session
+        data: toOpenAIFormat(session)
     };
 
     downloadFile(JSON.stringify(exportData, null, 2), `chat-export-${sanitizeFilename(session.title)}.json`);
@@ -23,7 +90,7 @@ export function exportChats(sessions: ChatSession[]) {
     const exportData: ExportFile = {
         version: EXPORT_VERSION,
         type: 'ai-chat-export',
-        data: sessions
+        data: sessions.map(s => toOpenAIFormat(s))
     };
 
     downloadFile(JSON.stringify(exportData, null, 2), `bulk-chat-export-${new Date().toISOString().slice(0, 10)}.json`);
@@ -59,7 +126,7 @@ export async function importChats(file: File): Promise<ChatSession[]> {
                     throw new Error('Invalid JSON file');
                 }
 
-                let sessions: ChatSession[] = [];
+                let sessions: any[] = [];
 
                 // Check for new wrap format
                 if (parsed.type === 'ai-chat-export' && parsed.data) {
@@ -75,11 +142,12 @@ export async function importChats(file: File): Promise<ChatSession[]> {
                     throw new Error('Unknown file format');
                 }
 
-                // Validate and hydrate dates
+                // Validate, normalize (from OpenAI format), and hydrate dates
                 const validatedSessions = sessions.map(s => {
                     validateSession(s);
-                    s.date = new Date(s.date);
-                    return s;
+                    const internalSession = fromOpenAIFormat(s);
+                    internalSession.date = new Date(internalSession.date);
+                    return internalSession;
                 });
 
                 resolve(validatedSessions);
