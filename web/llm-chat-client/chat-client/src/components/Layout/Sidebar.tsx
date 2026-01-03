@@ -1,4 +1,4 @@
-import { Plus, MessageSquare, Settings, PanelLeftClose, Trash2, Edit2, Star, Download, Upload } from 'lucide-react';
+import { Plus, MessageSquare, Settings, PanelLeftClose, Trash2, Edit2, Star, Download, Upload, CheckSquare, X, Square } from 'lucide-react';
 import './Sidebar.css';
 import { useState, useEffect } from 'react';
 
@@ -21,6 +21,8 @@ interface SidebarProps {
     onExportChat: (id: string) => void;
     onImportChat: () => void;
     onExportAllChats: () => void;
+    onExportSelectedChats?: (ids: string[]) => void;
+    onDeleteSelectedChats?: (ids: string[]) => void;
     selectedChatId: string | null;
     chatHistory: ChatSession[];
     isLoading?: boolean;
@@ -38,12 +40,51 @@ export function Sidebar({
     onExportChat,
     onImportChat,
     onExportAllChats,
+    onExportSelectedChats,
+    onDeleteSelectedChats,
     selectedChatId,
     chatHistory,
     isLoading
 }: SidebarProps) {
     const [editingChatId, setEditingChatId] = useState<string | null>(null);
     const [editTitle, setEditTitle] = useState('');
+
+    // Selection Mode State
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+    const toggleSelectionMode = () => {
+        setIsSelectionMode(!isSelectionMode);
+        setSelectedIds(new Set()); // Reset selection when toggling
+    };
+
+    const toggleChatSelection = (id: string) => {
+        const newSelected = new Set(selectedIds);
+        if (newSelected.has(id)) {
+            newSelected.delete(id);
+        } else {
+            newSelected.add(id);
+        }
+        setSelectedIds(newSelected);
+    };
+
+    const handleBulkExport = () => {
+        if (onExportSelectedChats && selectedIds.size > 0) {
+            onExportSelectedChats(Array.from(selectedIds));
+            setIsSelectionMode(false);
+            setSelectedIds(new Set());
+        }
+    };
+
+    const handleBulkDelete = () => {
+        if (onDeleteSelectedChats && selectedIds.size > 0) {
+            if (confirm(`Are you sure you want to delete ${selectedIds.size} chats?`)) {
+                onDeleteSelectedChats(Array.from(selectedIds));
+                setIsSelectionMode(false);
+                setSelectedIds(new Set());
+            }
+        }
+    };
 
     // Handler for delete to prevent selecting the chat
     const handleDelete = (e: React.MouseEvent, id: string) => {
@@ -121,24 +162,46 @@ export function Sidebar({
             style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
         >
             <div className="sidebar-header">
-                <button
-                    className="new-chat-btn"
-                    onClick={onNewChat}
-                    disabled={isLoading}
-                    title={isLoading ? "Please wait for generation to finish" : "New Chat"}
-                >
-                    <Plus size={16} />
-                    <span>New chat</span>
-                </button>
-                <button className="toggle-btn" onClick={onToggle}>
-                    <PanelLeftClose size={20} />
-                </button>
+                {isSelectionMode ? (
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                        <span>{selectedIds.size} Selected</span>
+                        <button className="toggle-btn" onClick={toggleSelectionMode} title="Cancel Selection">
+                            <X size={20} />
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <button
+                            className="new-chat-btn"
+                            onClick={onNewChat}
+                            disabled={isLoading}
+                            title={isLoading ? "Please wait for generation to finish" : "New Chat"}
+                        >
+                            <Plus size={16} />
+                            <span>New chat</span>
+                        </button>
+                        <button className="toggle-btn" onClick={onToggle}>
+                            <PanelLeftClose size={20} />
+                        </button>
+                    </>
+                )}
             </div>
 
             <div className="sidebar-content">
                 {chatHistory.length > 0 && (
                     <div className="history-group">
-                        <div className="history-label">Previous Chats</div>
+                        <div className="history-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Previous Chats</span>
+                            {!isSelectionMode && (
+                                <button
+                                    onClick={toggleSelectionMode}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: '4px' }}
+                                    title="Select Chats"
+                                >
+                                    <CheckSquare size={14} />
+                                </button>
+                            )}
+                        </div>
                         {chatHistory.map(chat => (
                             <div className="history-item-wrapper" key={chat.id}>
                                 {editingChatId === chat.id ? (
@@ -160,19 +223,35 @@ export function Sidebar({
                                     </div>
                                 ) : (
                                     <button
-                                        className={`history-item ${selectedChatId === chat.id ? 'active' : ''}`}
-                                        onClick={() => !isLoading && onSelectChat(chat.id)}
-                                        disabled={isLoading}
-                                        style={{ opacity: isLoading && selectedChatId !== chat.id ? 0.5 : 1, cursor: isLoading ? 'not-allowed' : 'pointer' }}
+                                        className={`history-item ${selectedChatId === chat.id ? 'active' : ''} ${isSelectionMode && selectedIds.has(chat.id) ? 'selected' : ''}`}
+                                        onClick={() => {
+                                            if (isSelectionMode) {
+                                                toggleChatSelection(chat.id);
+                                            } else if (!isLoading) {
+                                                onSelectChat(chat.id);
+                                            }
+                                        }}
+                                        disabled={isLoading && !isSelectionMode}
+                                        style={{ opacity: isLoading && selectedChatId !== chat.id && !isSelectionMode ? 0.5 : 1, cursor: isLoading && !isSelectionMode ? 'not-allowed' : 'pointer' }}
                                     >
-                                        {chat.isFavorite ? (
-                                            <Star size={16} fill="currentColor" style={{ flexShrink: 0, color: '#fbbf24' }} />
+                                        {isSelectionMode ? (
+                                            <div style={{ marginRight: '0px', display: 'flex', alignItems: 'center' }}>
+                                                {selectedIds.has(chat.id) ? (
+                                                    <CheckSquare size={16} color="#10a37f" />
+                                                ) : (
+                                                    <Square size={16} color="var(--text-dim)" />
+                                                )}
+                                            </div>
                                         ) : (
-                                            <MessageSquare size={16} style={{ flexShrink: 0 }} />
+                                            chat.isFavorite ? (
+                                                <Star size={16} fill="currentColor" style={{ flexShrink: 0, color: '#fbbf24' }} />
+                                            ) : (
+                                                <MessageSquare size={16} style={{ flexShrink: 0 }} />
+                                            )
                                         )}
-                                        <span className="text-truncate">{chat.title}</span>
+                                        <span className="text-truncate" style={{ opacity: isSelectionMode && !selectedIds.has(chat.id) ? 0.7 : 1 }}>{chat.title}</span>
 
-                                        {!isLoading && (
+                                        {!isLoading && !isSelectionMode && (
                                             <div className="item-actions">
                                                 <div
                                                     className="action-btn"
@@ -220,18 +299,43 @@ export function Sidebar({
             </div>
 
             <div className="sidebar-footer">
-                <button className="footer-item" onClick={onOpenSettings}>
-                    <Settings size={16} />
-                    <span>Settings</span>
-                </button>
-                <button className="footer-item" onClick={onImportChat} title="Import Chat">
-                    <Upload size={16} />
-                    <span>Import</span>
-                </button>
-                <button className="footer-item" onClick={onExportAllChats} title="Export All Chats">
-                    <Download size={16} />
-                    <span>Export All</span>
-                </button>
+                {isSelectionMode ? (
+                    <>
+                        <button
+                            className="footer-item"
+                            onClick={handleBulkDelete}
+                            disabled={selectedIds.size === 0}
+                            style={{ color: selectedIds.size > 0 ? '#ff4d4d' : 'var(--text-dim)' }}
+                        >
+                            <Trash2 size={16} />
+                            <span>Delete ({selectedIds.size})</span>
+                        </button>
+                        <button
+                            className="footer-item"
+                            onClick={handleBulkExport}
+                            disabled={selectedIds.size === 0}
+                            style={{ color: selectedIds.size > 0 ? 'var(--text-primary)' : 'var(--text-dim)' }}
+                        >
+                            <Download size={16} />
+                            <span>Export ({selectedIds.size})</span>
+                        </button>
+                    </>
+                ) : (
+                    <>
+                        <button className="footer-item" onClick={onOpenSettings}>
+                            <Settings size={16} />
+                            <span>Settings</span>
+                        </button>
+                        <button className="footer-item" onClick={onImportChat} title="Import Chat">
+                            <Upload size={16} />
+                            <span>Import</span>
+                        </button>
+                        <button className="footer-item" onClick={onExportAllChats} title="Export All Chats">
+                            <Download size={16} />
+                            <span>Export All</span>
+                        </button>
+                    </>
+                )}
             </div>
 
             {/* Resizer Handle */}

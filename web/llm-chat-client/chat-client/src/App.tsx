@@ -486,12 +486,30 @@ function App() {
     }
   };
 
-  const handleExportAllChats = () => {
-    exportChats(sessions);
+  // Bulk Actions
+  const handleExportSelectedChats = (ids: string[]) => {
+    const selectedSessions = sessions.filter(s => ids.includes(s.id));
+    if (selectedSessions.length > 0) {
+      exportChats(selectedSessions);
+    }
   };
 
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
+  const handleDeleteSelectedChats = async (ids: string[]) => {
+    // 1. Delete from DB
+    await Promise.all(ids.map(id => deleteSession(id)));
+    // 2. Update local state
+    setSessions(prev => prev.filter(s => !ids.includes(s.id)));
+    // 3. If current chat was deleted, reset
+    if (currentChatId && ids.includes(currentChatId)) {
+      setMessages([]);
+      setCurrentChatId(null);
+      setSystemPrompt(defaultSystemPrompt);
+      setTemperature(defaultTemperature);
+    }
+  };
+
+  const handleExportAllChats = () => {
+    exportChats(sessions);
   };
 
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -548,16 +566,20 @@ function App() {
     <div className="app-container">
       <Sidebar
         isOpen={isSidebarOpen}
-        onToggle={toggleSidebar}
+        onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+
         onNewChat={handleNewChat}
         onSelectChat={handleSelectChat}
         onDeleteChat={handleDeleteChat}
         onRenameChat={handleRenameChat}
         onToggleFavorite={handleToggleFavorite}
         onExportChat={handleExportChat}
-        onImportChat={handleImportClick}
+        onImportChat={() => fileInputRef.current?.click()}
         onExportAllChats={handleExportAllChats}
+        onExportSelectedChats={handleExportSelectedChats}
+        onDeleteSelectedChats={handleDeleteSelectedChats}
+
         selectedChatId={currentChatId}
         chatHistory={sessions}
         isLoading={isLoading}

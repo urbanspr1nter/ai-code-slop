@@ -112,6 +112,10 @@
     background-color: #343541;
 }
 
+.history-item.selected {
+    background-color: rgba(52, 53, 65, 0.6);
+}
+
 .text-truncate {
     white-space: nowrap;
     overflow: hidden;
