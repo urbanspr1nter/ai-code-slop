@@ -1,6 +1,6 @@
-import { Plus, MessageSquare, Settings, PanelLeftClose, Trash2, Edit2, Star } from 'lucide-react';
+import { Plus, MessageSquare, Settings, PanelLeftClose, Trash2, Edit2, Star, Download, Upload } from 'lucide-react';
 import './Sidebar.css';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface ChatSession {
     id: string;
@@ -18,6 +18,9 @@ interface SidebarProps {
     onDeleteChat: (id: string) => void;
     onRenameChat: (id: string, newTitle: string) => void;
     onToggleFavorite: (id: string) => void;
+    onExportChat: (id: string) => void;
+    onImportChat: () => void;
+    onExportAllChats: () => void;
     selectedChatId: string | null;
     chatHistory: ChatSession[];
     isLoading?: boolean;
@@ -32,6 +35,9 @@ export function Sidebar({
     onDeleteChat,
     onRenameChat,
     onToggleFavorite,
+    onExportChat,
+    onImportChat,
+    onExportAllChats,
     selectedChatId,
     chatHistory,
     isLoading
@@ -64,8 +70,56 @@ export function Sidebar({
         setEditingChatId(null);
     };
 
+    const [sidebarWidth, setSidebarWidth] = useState(() => {
+        const saved = localStorage.getItem('sidebarWidth');
+        return saved ? parseInt(saved, 10) : 260;
+    });
+    const [isResizing, setIsResizing] = useState(false);
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isResizing) return;
+            let newWidth = e.clientX;
+            if (newWidth < 200) newWidth = 200;
+            if (newWidth > 600) newWidth = 600;
+            setSidebarWidth(newWidth);
+        };
+
+        const handleMouseUp = () => {
+            if (isResizing) {
+                setIsResizing(false);
+                localStorage.setItem('sidebarWidth', sidebarWidth.toString());
+            }
+        };
+
+        if (isResizing) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none'; // Prevent selection while dragging
+        } else {
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+    }, [isResizing, sidebarWidth]);
+
+    const startResizing = (e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsResizing(true);
+    };
+
     return (
-        <aside className={`sidebar ${isOpen ? 'open' : 'closed'} ${isLoading ? 'generating' : ''}`}>
+        <aside
+            className={`sidebar ${isOpen ? 'open' : 'closed'} ${isLoading ? 'generating' : ''} ${isResizing ? 'resizing' : ''}`}
+            style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
+        >
             <div className="sidebar-header">
                 <button
                     className="new-chat-btn"
@@ -139,6 +193,16 @@ export function Sidebar({
                                                     <Edit2 size={14} />
                                                 </div>
                                                 <div
+                                                    className="action-btn export-btn"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onExportChat(chat.id);
+                                                    }}
+                                                    title="Export Chat"
+                                                >
+                                                    <Download size={14} />
+                                                </div>
+                                                <div
                                                     className="action-btn delete-btn"
                                                     onClick={(e) => handleDelete(e, chat.id)}
                                                     title="Delete Chat"
@@ -160,7 +224,18 @@ export function Sidebar({
                     <Settings size={16} />
                     <span>Settings</span>
                 </button>
+                <button className="footer-item" onClick={onImportChat} title="Import Chat">
+                    <Upload size={16} />
+                    <span>Import</span>
+                </button>
+                <button className="footer-item" onClick={onExportAllChats} title="Export All Chats">
+                    <Download size={16} />
+                    <span>Export All</span>
+                </button>
             </div>
+
+            {/* Resizer Handle */}
+            <div className="sidebar-resizer" onMouseDown={startResizing} />
         </aside>
     );
 }

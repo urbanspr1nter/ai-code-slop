@@ -3,13 +3,17 @@ import { Sidebar } from './components/Layout/Sidebar';
 import { MainChat } from './components/Chat/MainChat';
 import { SettingsModal } from './components/Layout/SettingsModal';
 import { saveSession, getSessions, deleteSession, getSession, saveSettings, getSettings, toggleFavorite } from './lib/db';
+
 import type { ChatSession, Message } from './lib/db';
+import { exportChat, exportChats, importChats } from './lib/export-import';
 import './App.css';
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   const abortControllerRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State for the active chat
   const [messages, setMessages] = useState<Message[]>([]);
@@ -24,7 +28,9 @@ function App() {
   const [apiUrl, setApiUrl] = useState('http://192.168.1.29:8000/v1');
   const [modelName, setModelName] = useState('Qwen3-4B-Thinking-2507');
   const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.');
+  const [defaultSystemPrompt, setDefaultSystemPrompt] = useState('You are a helpful assistant.');
   const [temperature, setTemperature] = useState(0.7);
+  const [defaultTemperature, setDefaultTemperature] = useState(0.7);
 
   const [availableModels, setAvailableModels] = useState<string[]>([]);
 
@@ -66,7 +72,11 @@ function App() {
       if (loadedSettings) {
         setApiUrl(loadedSettings.apiUrl);
         setModelName(loadedSettings.modelName);
+        // Default system prompt comes from global settings
+        setDefaultSystemPrompt(loadedSettings.systemPrompt);
         setSystemPrompt(loadedSettings.systemPrompt);
+
+        setDefaultTemperature(loadedSettings.temperature);
         setTemperature(loadedSettings.temperature);
       }
     };
@@ -97,7 +107,7 @@ function App() {
     if (currentChatId) {
       const sessionToSave = sessions.find(s => s.id === currentChatId);
       if (sessionToSave) {
-        const updatedSession = { ...sessionToSave, messages: messages };
+        const updatedSession = { ...sessionToSave, messages: messages, systemPrompt, temperature };
 
         // Update local state
         setSessions(prev => prev.map(s =>
@@ -112,6 +122,8 @@ function App() {
     // Reset view
     setCurrentChatId(null);
     setMessages([]);
+    setSystemPrompt(defaultSystemPrompt);
+    setTemperature(defaultTemperature);
   };
 
   const handleSelectChat = async (id: string) => {
@@ -121,7 +133,7 @@ function App() {
     if (currentChatId) {
       const sessionToSave = sessions.find(s => s.id === currentChatId);
       if (sessionToSave) {
-        const updatedSession = { ...sessionToSave, messages: messages };
+        const updatedSession = { ...sessionToSave, messages: messages, systemPrompt, temperature };
 
         // Update local
         setSessions(prev => prev.map(s =>
@@ -140,6 +152,8 @@ function App() {
 
       setCurrentChatId(id);
       setMessages(target.messages);
+      setSystemPrompt(target.systemPrompt || defaultSystemPrompt);
+      setTemperature(target.temperature ?? defaultTemperature);
 
       if (window.innerWidth < 768) setIsSidebarOpen(false);
     }
@@ -383,10 +397,10 @@ function App() {
     } else {
       // Update existing
       setSessions(prev => prev.map(s =>
-        s.id === activeSessionId ? { ...s, messages: newMessages } : s
+        s.id === activeSessionId ? { ...s, messages: newMessages, systemPrompt, temperature } : s
       ));
       const s = sessions.find(s => s.id === activeSessionId);
-      if (s) await saveSession({ ...s, messages: newMessages });
+      if (s) await saveSession({ ...s, messages: newMessages, systemPrompt, temperature });
     }
 
     // Call Generation
@@ -465,6 +479,67 @@ function App() {
     await toggleFavorite(id);
   };
 
+  const handleExportChat = (id: string) => {
+    const session = sessions.find(s => s.id === id);
+    if (session) {
+      exportChat(session);
+    }
+  };
+
+  const handleExportAllChats = () => {
+    exportChats(sessions);
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const importedSessions = await importChats(file);
+      let newSessions = [...sessions];
+      let switchId = null;
+
+      for (const importedSession of importedSessions) {
+        // Check if session already exists
+        if (newSessions.some(s => s.id === importedSession.id)) {
+          // Handle collision - always duplicate for now
+          importedSession.id = `imported-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          importedSession.title += " (Imported)";
+        }
+
+        await saveSession(importedSession);
+        newSessions.push(importedSession);
+        switchId = importedSession.id; // Switch to the last imported
+      }
+
+      setSessions(newSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+
+      // Switch to the last imported session
+      if (switchId && importedSessions.length === 1) {
+        const s = newSessions.find(x => x.id === switchId);
+        if (s) {
+          setCurrentChatId(s.id);
+          setMessages(s.messages);
+          setSystemPrompt(s.systemPrompt || defaultSystemPrompt);
+          setTemperature(s.temperature ?? defaultTemperature);
+        }
+      } else if (importedSessions.length > 1) {
+        alert(`Successfully imported ${importedSessions.length} chats.`);
+      }
+
+      // Clear input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+
+    } catch (err) {
+      console.error("Import failed", err);
+      alert("Failed to import chat: " + (err as Error).message);
+    }
+  };
+
   const contextTokens = useMemo(() => {
     return messages.reduce((acc, m) => acc + Math.ceil(m.content.length / 4), 0) + Math.ceil((systemPrompt || '').length / 4);
   }, [messages, systemPrompt]);
@@ -480,6 +555,9 @@ function App() {
         onDeleteChat={handleDeleteChat}
         onRenameChat={handleRenameChat}
         onToggleFavorite={handleToggleFavorite}
+        onExportChat={handleExportChat}
+        onImportChat={handleImportClick}
+        onExportAllChats={handleExportAllChats}
         selectedChatId={currentChatId}
         chatHistory={sessions}
         isLoading={isLoading}
@@ -501,7 +579,32 @@ function App() {
           onToggleSidebar={toggleSidebar}
           onModelSelect={(newModel) => {
             setModelName(newModel);
-            saveSettings({ apiUrl, modelName: newModel, systemPrompt, temperature });
+            saveSettings({ apiUrl, modelName: newModel, systemPrompt: defaultSystemPrompt, temperature: defaultTemperature });
+          }}
+          systemPrompt={systemPrompt}
+          onSystemPromptChange={async (val) => {
+            setSystemPrompt(val);
+            if (currentChatId) {
+              const s = sessions.find(ss => ss.id === currentChatId);
+              if (s) {
+                const updated = { ...s, systemPrompt: val };
+                setSessions(prev => prev.map(ss => ss.id === currentChatId ? updated : ss));
+                // Debounce save? For now direct save is okay for this complexity
+                await saveSession(updated);
+              }
+            }
+          }}
+          temperature={temperature}
+          onTemperatureChange={async (val) => {
+            setTemperature(val);
+            if (currentChatId) {
+              const s = sessions.find(ss => ss.id === currentChatId);
+              if (s) {
+                const updated = { ...s, temperature: val };
+                setSessions(prev => prev.map(ss => ss.id === currentChatId ? updated : ss));
+                await saveSession(updated);
+              }
+            }
           }}
         />
       </div>
@@ -511,20 +614,39 @@ function App() {
         onClose={() => setIsSettingsOpen(false)}
         currentApiUrl={apiUrl}
         currentModel={modelName}
-        currentSystemPrompt={systemPrompt}
-        currentTemperature={temperature}
+        currentSystemPrompt={defaultSystemPrompt}
+        currentTemperature={defaultTemperature}
         onSave={async (url, model, sysPrompt, temp) => {
           setApiUrl(url);
           setModelName(model);
-          setSystemPrompt(sysPrompt);
-          setTemperature(temp);
+          setDefaultSystemPrompt(sysPrompt);
+          setDefaultTemperature(temp);
+
+          // Always save to global settings
           await saveSettings({
             apiUrl: url,
             modelName: model,
             systemPrompt: sysPrompt,
             temperature: temp
           });
+
+          // If no chat is active, or if we want to live-update the current empty/default state?
+          // If a chat is active, we do NOT change its current prompt/temp.
+          // If NO chat is active (New Chat view), we SHOULD update the current view to match the new defaults.
+          if (!currentChatId) {
+            setSystemPrompt(sysPrompt);
+            setTemperature(temp);
+          }
         }}
+      />
+
+      {/* Hidden File Input for Import */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileImport}
+        accept=".json"
+        style={{ display: 'none' }}
       />
     </div>
   )

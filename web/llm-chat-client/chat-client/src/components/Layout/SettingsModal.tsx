@@ -67,7 +67,7 @@ export function SettingsModal({
 
 
                     <div className="form-group">
-                        <label>System Prompt</label>
+                        <label>Default System Prompt (for new chats)</label>
                         <textarea
                             rows={3}
                             value={systemPrompt}
@@ -78,7 +78,7 @@ export function SettingsModal({
                     </div>
 
                     <div className="form-group">
-                        <label>Temperature: {temperature}</label>
+                        <label>Default Temperature: {temperature} (for new chats)</label>
                         <input
                             type="range"
                             min="0"

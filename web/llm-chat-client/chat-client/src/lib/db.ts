@@ -18,6 +18,8 @@ interface ChatSession {
     date: Date;
     messages: Message[];
     isFavorite?: boolean;
+    systemPrompt?: string;
+    temperature?: number;
 }
 
 const DB_VERSION = 3;

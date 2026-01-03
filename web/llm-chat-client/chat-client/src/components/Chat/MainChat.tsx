@@ -3,8 +3,9 @@ import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import './MainChat.css';
-import { ArrowDown, ChevronDown, Check, RefreshCw, PanelLeft } from 'lucide-react';
+import { ArrowDown, ChevronDown, Check, RefreshCw, PanelLeft, SlidersHorizontal } from 'lucide-react';
 import { ImageLightbox } from './ImageLightbox';
+import { ChatControls } from './ChatControls';
 
 interface Message {
     role: 'user' | 'assistant' | 'system';
@@ -32,6 +33,10 @@ interface MainChatProps {
     onRefreshModels?: () => void;
     isSidebarOpen?: boolean;
     onToggleSidebar?: () => void;
+    systemPrompt?: string;
+    onSystemPromptChange?: (val: string) => void;
+    temperature?: number;
+    onTemperatureChange?: (val: number) => void;
 }
 
 export function MainChat({
@@ -48,12 +53,17 @@ export function MainChat({
     availableModels,
     onRefreshModels,
     isSidebarOpen,
-    onToggleSidebar
+    onToggleSidebar,
+    systemPrompt = '',
+    onSystemPromptChange,
+    temperature = 0.7,
+    onTemperatureChange
 }: MainChatProps) {
     const virtuosoRef = useRef<VirtuosoHandle>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [atBottom, setAtBottom] = useState(true);
     const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+    const [isControlsOpen, setIsControlsOpen] = useState(false);
     const [lightboxImage, setLightboxImage] = useState<string | null>(null);
     const modelMenuRef = useRef<HTMLDivElement>(null);
 
@@ -131,6 +141,13 @@ export function MainChat({
                             </button>
                         )}
                     </div>
+                    <button
+                        className={`chat-controls-toggle ${isControlsOpen ? 'active' : ''}`}
+                        onClick={() => setIsControlsOpen(!isControlsOpen)}
+                        title="Chat Parameters"
+                    >
+                        <SlidersHorizontal size={18} />
+                    </button>
                 </div>
                 {contextTokens !== undefined && contextTokens > 0 && (
                     <div className="header-token-badge">
@@ -138,6 +155,15 @@ export function MainChat({
                     </div>
                 )}
             </header>
+
+            <ChatControls
+                isOpen={isControlsOpen}
+                onClose={() => setIsControlsOpen(false)}
+                systemPrompt={systemPrompt}
+                onSystemPromptChange={onSystemPromptChange || (() => { })}
+                temperature={temperature}
+                onTemperatureChange={onTemperatureChange || (() => { })}
+            />
 
             {messages.length === 0 ? (
                 <div className="messages-scroll-area">
