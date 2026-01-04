@@ -9,7 +9,8 @@ interface SettingsModalProps {
     currentModel: string;
     currentSystemPrompt: string;
     currentTemperature: number;
-    onSave: (apiUrl: string, model: string, systemPrompt: string, temperature: number) => void;
+    currentReasoningEffort?: 'low' | 'medium' | 'high';
+    onSave: (apiUrl: string, model: string, systemPrompt: string, temperature: number, reasoningEffort?: 'low' | 'medium' | 'high') => void;
 }
 
 export function SettingsModal({
@@ -19,12 +20,14 @@ export function SettingsModal({
     currentModel,
     currentSystemPrompt,
     currentTemperature,
+    currentReasoningEffort,
     onSave
 }: SettingsModalProps) {
     const [apiUrl, setApiUrl] = useState(currentApiUrl);
     const [model, setModel] = useState(currentModel);
     const [systemPrompt, setSystemPrompt] = useState(currentSystemPrompt);
     const [temperature, setTemperature] = useState(currentTemperature);
+    const [reasoningEffort, setReasoningEffort] = useState(currentReasoningEffort);
 
     // Reset local state when modal opens with new props
     useEffect(() => {
@@ -32,12 +35,13 @@ export function SettingsModal({
         setModel(currentModel);
         setSystemPrompt(currentSystemPrompt);
         setTemperature(currentTemperature);
-    }, [isOpen, currentApiUrl, currentModel, currentSystemPrompt, currentTemperature]);
+        setReasoningEffort(currentReasoningEffort);
+    }, [isOpen, currentApiUrl, currentModel, currentSystemPrompt, currentTemperature, currentReasoningEffort]);
 
     if (!isOpen) return null;
 
     const handleSave = () => {
-        onSave(apiUrl, model, systemPrompt, temperature);
+        onSave(apiUrl, model, systemPrompt, temperature, reasoningEffort);
         onClose();
     };
 
@@ -90,6 +94,29 @@ export function SettingsModal({
                         <div className="slider-labels">
                             <span>Precise (0)</span>
                             <span>Creative (2)</span>
+                        </div>
+                    </div>
+
+                    <div className="form-group">
+                        <label>Default Reasoning Effort (for new chats)</label>
+                        <div className="effort-group">
+                            <button
+                                className={`effort-btn ${!reasoningEffort ? 'active' : ''}`}
+                                onClick={() => setReasoningEffort(undefined)}
+                                title="Default"
+                            >
+                                Default
+                            </button>
+                            {(['low', 'medium', 'high'] as const).map((level) => (
+                                <button
+                                    key={level}
+                                    className={`effort-btn ${reasoningEffort === level ? 'active' : ''}`}
+                                    onClick={() => setReasoningEffort(level)}
+                                    title={level.charAt(0).toUpperCase() + level.slice(1)}
+                                >
+                                    {level.charAt(0).toUpperCase() + level.slice(1)}
+                                </button>
+                            ))}
                         </div>
                     </div>
                 </div>

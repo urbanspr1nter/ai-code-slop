@@ -9,6 +9,8 @@ interface ChatControlsProps {
     onSystemPromptChange: (val: string) => void;
     temperature: number;
     onTemperatureChange: (val: number) => void;
+    reasoningEffort?: 'low' | 'medium' | 'high';
+    onReasoningEffortChange?: (val: 'low' | 'medium' | 'high') => void;
     onSave?: () => void;
 }
 
@@ -18,7 +20,9 @@ export function ChatControls({
     systemPrompt,
     onSystemPromptChange,
     temperature,
-    onTemperatureChange
+    onTemperatureChange,
+    reasoningEffort,
+    onReasoningEffortChange
 }: ChatControlsProps) {
     const popupRef = useRef<HTMLDivElement>(null);
 
@@ -69,6 +73,30 @@ export function ChatControls({
                         <span>Creative</span>
                     </div>
                 </div>
+                {onReasoningEffortChange && (
+                    <div className="control-group">
+                        <label>Reasoning Effort</label>
+                        <div className="effort-group">
+                            <button
+                                className={`effort-btn ${!reasoningEffort ? 'active' : ''}`}
+                                onClick={() => onReasoningEffortChange(undefined as any)}
+                                title="Default"
+                            >
+                                Default
+                            </button>
+                            {(['low', 'medium', 'high'] as const).map((level) => (
+                                <button
+                                    key={level}
+                                    className={`effort-btn ${reasoningEffort === level ? 'active' : ''}`}
+                                    onClick={() => onReasoningEffortChange(level)}
+                                    title={level.charAt(0).toUpperCase() + level.slice(1)}
+                                >
+                                    {level.charAt(0).toUpperCase() + level.slice(1)}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

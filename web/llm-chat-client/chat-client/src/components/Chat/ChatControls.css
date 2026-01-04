@@ -13,8 +13,15 @@
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .controls-header {
@@ -83,4 +90,39 @@
     justify-content: space-between;
     font-size: 0.75rem;
     color: var(--text-tertiary);
+}
+
+/* Toggle Group Styles */
+.effort-group {
+    display: flex;
+    gap: 4px;
+    background-color: var(--bg-primary);
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.effort-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 6px 4px;
+    font-size: 0.85rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.effort-btn:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.effort-btn.active {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    border: 1px solid var(--border-color);
+    font-weight: 500;
 }

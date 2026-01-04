@@ -31,6 +31,8 @@ function App() {
   const [defaultSystemPrompt, setDefaultSystemPrompt] = useState('You are a helpful assistant.');
   const [temperature, setTemperature] = useState(0.7);
   const [defaultTemperature, setDefaultTemperature] = useState(0.7);
+  const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high' | undefined>(undefined);
+  const [defaultReasoningEffort, setDefaultReasoningEffort] = useState<'low' | 'medium' | 'high' | undefined>(undefined);
 
   const [availableModels, setAvailableModels] = useState<string[]>([]);
 
@@ -48,7 +50,7 @@ function App() {
           if (loadedModels.length > 0 && !loadedModels.includes(modelName)) {
             const newDefault = loadedModels[0];
             setModelName(newDefault);
-            saveSettings({ apiUrl, modelName: newDefault, systemPrompt, temperature });
+            saveSettings({ apiUrl, modelName: newDefault, systemPrompt, temperature, reasoningEffort });
           }
         }
       }
@@ -78,6 +80,9 @@ function App() {
 
         setDefaultTemperature(loadedSettings.temperature);
         setTemperature(loadedSettings.temperature);
+
+        setDefaultReasoningEffort(loadedSettings.reasoningEffort);
+        setReasoningEffort(loadedSettings.reasoningEffort);
       }
     };
     loadData();
@@ -107,7 +112,7 @@ function App() {
     if (currentChatId) {
       const sessionToSave = sessions.find(s => s.id === currentChatId);
       if (sessionToSave) {
-        const updatedSession = { ...sessionToSave, messages: messages, systemPrompt, temperature };
+        const updatedSession = { ...sessionToSave, messages: messages, systemPrompt, temperature, reasoningEffort };
 
         // Update local state
         setSessions(prev => prev.map(s =>
@@ -124,6 +129,7 @@ function App() {
     setMessages([]);
     setSystemPrompt(defaultSystemPrompt);
     setTemperature(defaultTemperature);
+    setReasoningEffort(defaultReasoningEffort);
   };
 
   const handleSelectChat = async (id: string) => {
@@ -133,7 +139,7 @@ function App() {
     if (currentChatId) {
       const sessionToSave = sessions.find(s => s.id === currentChatId);
       if (sessionToSave) {
-        const updatedSession = { ...sessionToSave, messages: messages, systemPrompt, temperature };
+        const updatedSession = { ...sessionToSave, messages: messages, systemPrompt, temperature, reasoningEffort };
 
         // Update local
         setSessions(prev => prev.map(s =>
@@ -154,6 +160,7 @@ function App() {
       setMessages(target.messages);
       setSystemPrompt(target.systemPrompt || defaultSystemPrompt);
       setTemperature(target.temperature ?? defaultTemperature);
+      setReasoningEffort(target.reasoningEffort ?? defaultReasoningEffort);
 
       if (window.innerWidth < 768) setIsSidebarOpen(false);
     }
@@ -167,7 +174,7 @@ function App() {
     }
   };
 
-  const processGeneration = async (messagesToUse: Message[], sessionId: string) => {
+  const processGeneration = async (messagesToUse: Message[], sessionId: string, targetIndex?: number) => {
     setIsLoading(true);
     abortControllerRef.current = new AbortController();
 
@@ -200,6 +207,7 @@ function App() {
             return { role: msg.role, content: msg.content };
           }),
           temperature: temperature,
+          reasoning_effort: reasoningEffort,
           stream: true
         }),
         signal: abortControllerRef.current.signal
@@ -212,8 +220,13 @@ function App() {
       const reader = response.body?.getReader();
       if (!reader) throw new Error("Response body is null");
 
-      // Initialize empty assistant message
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+      // Initialize assistant message if not targeting specific index
+      if (targetIndex === undefined) {
+        setMessages(prev => {
+          targetIndex = prev.length;
+          return [...prev, { role: 'assistant', content: '' }];
+        });
+      }
 
       const decoder = new TextDecoder();
       let buffer = '';
@@ -275,14 +288,23 @@ function App() {
 
                 setMessages(prev => {
                   const next = [...prev];
-                  const lastMsg = next[next.length - 1];
-                  if (lastMsg.role === 'assistant') {
-                    lastMsg.content = accumulatedContent;
-                    lastMsg.stats = {
+                  if (targetIndex !== undefined && next[targetIndex]) {
+                    const msg = next[targetIndex];
+                    msg.content = accumulatedContent;
+                    msg.stats = {
                       totalTokens: tokenCount,
                       generationTime: duration,
                       tokensPerSecond: tps
                     };
+
+                    // Update sibling as well if it exists
+                    if (msg.siblings && msg.siblingIndex !== undefined) {
+                      msg.siblings[msg.siblingIndex] = {
+                        ...msg.siblings[msg.siblingIndex],
+                        content: accumulatedContent,
+                        stats: msg.stats
+                      };
+                    }
                   }
                   return next;
                 });
@@ -307,31 +329,28 @@ function App() {
       const finalTps = finalDuration > 0 ? tokenCount / finalDuration : 0;
 
       // Force final update to ensure all content is visible
+      let finalMessages: Message[] = [];
       setMessages(prev => {
         const next = [...prev];
-        const lastMsg = next[next.length - 1];
-        if (lastMsg.role === 'assistant') {
-          lastMsg.content = accumulatedContent;
-          lastMsg.stats = {
+        if (targetIndex !== undefined && next[targetIndex]) {
+          const msg = next[targetIndex];
+          msg.content = accumulatedContent;
+          msg.stats = {
             totalTokens: tokenCount,
             generationTime: finalDuration,
             tokensPerSecond: finalTps
           };
+          if (msg.siblings && msg.siblingIndex !== undefined) {
+            msg.siblings[msg.siblingIndex] = {
+              ...msg.siblings[msg.siblingIndex],
+              content: accumulatedContent,
+              stats: msg.stats
+            };
+          }
         }
+        finalMessages = next;
         return next;
       });
-
-      const finalMsg: Message = {
-        role: 'assistant',
-        content: accumulatedContent,
-        stats: {
-          totalTokens: tokenCount,
-          generationTime: finalDuration,
-          tokensPerSecond: finalTps
-        }
-      };
-
-      const finalMessages = [...messagesToUse, finalMsg];
 
       // Update local session state
       setSessions(prev => prev.map(s =>
@@ -345,13 +364,9 @@ function App() {
           if (freshSession) {
             const updated = { ...freshSession, messages: finalMessages };
             await saveSession(updated);
-          } else {
-            // Fallback logic
           }
         } catch (e) { console.error("Failed to save final", e); }
       }
-
-      // (Removed Title Generation block)
 
     } catch (error: any) {
       if (error.name === 'AbortError') {
@@ -365,9 +380,11 @@ function App() {
       };
       setMessages(prev => {
         const next = [...prev];
-        const last = next[next.length - 1];
-        if (last?.role === 'assistant' && !last.content) next[next.length - 1] = errorMsg;
-        else next.push(errorMsg);
+        if (targetIndex !== undefined) {
+          next[targetIndex] = errorMsg;
+        } else {
+          next.push(errorMsg);
+        }
         return next;
       });
     } finally {
@@ -397,10 +414,10 @@ function App() {
     } else {
       // Update existing
       setSessions(prev => prev.map(s =>
-        s.id === activeSessionId ? { ...s, messages: newMessages, systemPrompt, temperature } : s
+        s.id === activeSessionId ? { ...s, messages: newMessages, systemPrompt, temperature, reasoningEffort } : s
       ));
       const s = sessions.find(s => s.id === activeSessionId);
-      if (s) await saveSession({ ...s, messages: newMessages, systemPrompt, temperature });
+      if (s) await saveSession({ ...s, messages: newMessages, systemPrompt, temperature, reasoningEffort });
     }
 
     // Call Generation
@@ -410,21 +427,71 @@ function App() {
   const handleRegenerate = async () => {
     if (isLoading || messages.length === 0) return;
 
-    const lastMsg = messages[messages.length - 1];
+    const lastMsgIndex = messages.length - 1;
+    const lastMsg = messages[lastMsgIndex];
 
-    // If the last message IS from assistant, we remove it and re-run conversation up to that point
     if (lastMsg.role === 'assistant') {
-      const historyToKeep = messages.slice(0, -1);
-      setMessages(historyToKeep);
+      // Prepare siblings structure
+      const updatedMsg = { ...lastMsg };
+
+      // Ensure current content is saved in siblings
+      if (!updatedMsg.siblings) {
+        updatedMsg.siblings = [
+          { role: lastMsg.role, content: lastMsg.content, stats: lastMsg.stats }
+        ];
+        updatedMsg.siblingIndex = 0;
+      }
+
+      // Add new empty sibling
+      const newSibling = { role: 'assistant', content: '', stats: undefined } as Message;
+      updatedMsg.siblings = [...(updatedMsg.siblings || []), newSibling];
+      updatedMsg.siblingIndex = updatedMsg.siblings.length - 1;
+      updatedMsg.content = ''; // Reset main content for streaming
+      updatedMsg.stats = undefined;
+
+      // Update state before generation
+      const newMessages = [...messages];
+      newMessages[lastMsgIndex] = updatedMsg;
+      setMessages(newMessages);
+
+      // Context is everything BEFORE this message
+      const context = messages.slice(0, -1);
 
       if (currentChatId) {
-        processGeneration(historyToKeep, currentChatId);
+        // Target the EXISTING index (lastMsgIndex)
+        processGeneration(context, currentChatId, lastMsgIndex);
       }
-    }
-    // If last matches user (e.g. error condition where AI didn't reply), we just re-run
-    else if (lastMsg.role === 'user') {
+    } else if (lastMsg.role === 'user') {
+      // Just standard generation
       if (currentChatId) {
         processGeneration(messages, currentChatId);
+      }
+    }
+  };
+
+  const handleVersionChange = (index: number, newVersionIndex: number) => {
+    const msg = messages[index];
+    if (!msg.siblings || !msg.siblings[newVersionIndex]) return;
+
+    const targetVersion = msg.siblings[newVersionIndex];
+    const updatedMsg = {
+      ...msg,
+      content: targetVersion.content,
+      stats: targetVersion.stats,
+      siblingIndex: newVersionIndex
+    };
+
+    const newMessages = [...messages];
+    newMessages[index] = updatedMsg;
+    setMessages(newMessages);
+
+    // Persist
+    if (currentChatId) {
+      const s = sessions.find(ss => ss.id === currentChatId);
+      if (s) {
+        const updatedSession = { ...s, messages: newMessages };
+        saveSession(updatedSession);
+        setSessions(prev => prev.map(ss => ss.id === currentChatId ? updatedSession : ss));
       }
     }
   };
@@ -505,6 +572,7 @@ function App() {
       setCurrentChatId(null);
       setSystemPrompt(defaultSystemPrompt);
       setTemperature(defaultTemperature);
+      setReasoningEffort(defaultReasoningEffort);
     }
   };
 
@@ -592,6 +660,7 @@ function App() {
           chatId={currentChatId}
           onStop={handleStop}
           onRegenerate={handleRegenerate}
+          onVersionChange={handleVersionChange}
           contextTokens={contextTokens}
           onDeleteMessage={handleDeleteMessage}
           selectedModel={modelName}
@@ -601,7 +670,19 @@ function App() {
           onToggleSidebar={toggleSidebar}
           onModelSelect={(newModel) => {
             setModelName(newModel);
-            saveSettings({ apiUrl, modelName: newModel, systemPrompt: defaultSystemPrompt, temperature: defaultTemperature });
+            saveSettings({ apiUrl, modelName: newModel, systemPrompt: defaultSystemPrompt, temperature: defaultTemperature, reasoningEffort: defaultReasoningEffort });
+          }}
+          reasoningEffort={reasoningEffort}
+          onReasoningEffortChange={async (val) => {
+            setReasoningEffort(val);
+            if (currentChatId) {
+              const s = sessions.find(ss => ss.id === currentChatId);
+              if (s) {
+                const updated = { ...s, reasoningEffort: val };
+                setSessions(prev => prev.map(ss => ss.id === currentChatId ? updated : ss));
+                await saveSession(updated);
+              }
+            }
           }}
           systemPrompt={systemPrompt}
           onSystemPromptChange={async (val) => {
@@ -638,18 +719,21 @@ function App() {
         currentModel={modelName}
         currentSystemPrompt={defaultSystemPrompt}
         currentTemperature={defaultTemperature}
-        onSave={async (url, model, sysPrompt, temp) => {
+        currentReasoningEffort={defaultReasoningEffort}
+        onSave={async (url, model, sysPrompt, temp, effort) => {
           setApiUrl(url);
           setModelName(model);
           setDefaultSystemPrompt(sysPrompt);
           setDefaultTemperature(temp);
+          setDefaultReasoningEffort(effort);
 
           // Always save to global settings
           await saveSettings({
             apiUrl: url,
             modelName: model,
             systemPrompt: sysPrompt,
-            temperature: temp
+            temperature: temp,
+            reasoningEffort: effort
           });
 
           // If no chat is active, or if we want to live-update the current empty/default state?
@@ -658,6 +742,7 @@ function App() {
           if (!currentChatId) {
             setSystemPrompt(sysPrompt);
             setTemperature(temp);
+            setReasoningEffort(effort);
           }
         }}
       />

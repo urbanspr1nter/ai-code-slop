@@ -279,7 +279,33 @@
     background-color: rgba(255, 255, 255, 0.05);
     color: var(--text-primary);
 }
+
 .header-left {
     display: flex;
     align-items: center;
+}
+
+.header-info-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.info-pill {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-transform: capitalize;
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .header-info-group {
+        display: none;
+    }
 }

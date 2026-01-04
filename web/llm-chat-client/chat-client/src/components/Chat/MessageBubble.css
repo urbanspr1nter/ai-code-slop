@@ -393,6 +393,7 @@
 .code-copy-text {
     font-weight: 500;
 }
+
 .message-images-grid {
     display: flex;
     flex-wrap: wrap;
@@ -406,5 +407,57 @@
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     object-fit: cover;
-    background-color: rgba(0,0,0,0.2);
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.version-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    background-color: rgba(255, 255, 255, 0.05);
+    padding: 2px 4px;
+    border-radius: 6px;
+    margin-right: auto;
+    /* Push stats to the right if they share the flex container? No, stats are in their own div. */
+}
+
+/* Ensure footer justifies correctly */
+.message-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+    gap: 12px;
+}
+
+/* If navigation pills are used, let's keep them styled discreetly */
+.version-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.version-arrow:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.version-arrow:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.version-count {
+    font-variant-numeric: tabular-nums;
+    min-width: 32px;
+    text-align: center;
 }

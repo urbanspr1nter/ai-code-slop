@@ -10,6 +10,8 @@ interface Message {
         totalTokens: number;
         generationTime: number;
     };
+    siblings?: Message[];
+    siblingIndex?: number;
 }
 
 interface ChatSession {
@@ -20,6 +22,7 @@ interface ChatSession {
     isFavorite?: boolean;
     systemPrompt?: string;
     temperature?: number;
+    reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 const DB_VERSION = 3;
@@ -41,6 +44,7 @@ export interface AppSettings {
     modelName: string;
     systemPrompt: string;
     temperature: number;
+    reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 const DB_NAME = 'ai-chat-db';

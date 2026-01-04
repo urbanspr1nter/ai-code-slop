@@ -8,7 +8,7 @@ import 'katex/dist/katex.min.css';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './MessageBubble.css';
-import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronRight, FileText, Trash2 } from 'lucide-react';
+import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, FileText, Trash2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 const CodeBlock = ({ language, children, ...props }: any) => {
@@ -58,9 +58,12 @@ interface MessageBubbleProps {
     onRegenerate?: () => void;
     isStreaming?: boolean;
     onDelete?: () => void;
+    siblings?: { content: string; stats?: any }[];
+    siblingIndex?: number;
+    onVersionChange?: (index: number) => void;
 }
 
-export function MessageBubble({ role, content, images, onImageClick, stats, onRegenerate, isStreaming, onDelete }: MessageBubbleProps) {
+export function MessageBubble({ role, content, images, onImageClick, stats, onRegenerate, isStreaming, onDelete, siblings, siblingIndex, onVersionChange }: MessageBubbleProps) {
     const [isCopied, setIsCopied] = useState(false);
     const [isThinkingExpanded, setIsThinkingExpanded] = useState(true);
     const [showRaw, setShowRaw] = useState(false);
@@ -241,6 +244,29 @@ export function MessageBubble({ role, content, images, onImageClick, stats, onRe
                                 <span>{stats.generationTime.toFixed(2)}s</span>
                                 <span className="separator">•</span>
                                 <span>{stats.tokensPerSecond.toFixed(1)} t/s</span>
+                            </div>
+                        )}
+                        {siblings && siblings.length > 1 && siblingIndex !== undefined && onVersionChange && (
+                            <div className="version-controls">
+                                <button
+                                    onClick={() => onVersionChange(siblingIndex - 1)}
+                                    disabled={siblingIndex === 0}
+                                    className="version-arrow"
+                                    title="Previous Version"
+                                >
+                                    <ChevronLeft size={14} />
+                                </button>
+                                <span className="version-count">
+                                    {siblingIndex + 1} / {siblings.length}
+                                </span>
+                                <button
+                                    onClick={() => onVersionChange(siblingIndex + 1)}
+                                    disabled={siblingIndex === siblings.length - 1}
+                                    className="version-arrow"
+                                    title="Next Version"
+                                >
+                                    <ChevronRight size={14} />
+                                </button>
                             </div>
                         )}
                         <div className="message-actions" style={{ display: 'flex', gap: '8px' }}>

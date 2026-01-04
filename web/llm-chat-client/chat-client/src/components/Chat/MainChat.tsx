@@ -16,11 +16,13 @@ interface Message {
         totalTokens: number;
         generationTime: number;
     };
+    siblings?: Message[];
+    siblingIndex?: number;
 }
 
 interface MainChatProps {
     messages: Message[];
-    onSendMessage: (content: string) => void;
+    onSendMessage: (content: string, images?: string[]) => void;
     isLoading?: boolean;
     chatId?: string | null;
     onStop?: () => void;
@@ -37,6 +39,9 @@ interface MainChatProps {
     onSystemPromptChange?: (val: string) => void;
     temperature?: number;
     onTemperatureChange?: (val: number) => void;
+    reasoningEffort?: 'low' | 'medium' | 'high';
+    onReasoningEffortChange?: (val: 'low' | 'medium' | 'high') => void;
+    onVersionChange?: (messageIndex: number, newVersionIndex: number) => void;
 }
 
 export function MainChat({
@@ -57,7 +62,10 @@ export function MainChat({
     systemPrompt = '',
     onSystemPromptChange,
     temperature = 0.7,
-    onTemperatureChange
+    onTemperatureChange,
+    reasoningEffort,
+    onReasoningEffortChange,
+    onVersionChange
 }: MainChatProps) {
     const virtuosoRef = useRef<VirtuosoHandle>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -149,11 +157,23 @@ export function MainChat({
                         <SlidersHorizontal size={18} />
                     </button>
                 </div>
-                {contextTokens !== undefined && contextTokens > 0 && (
-                    <div className="header-token-badge">
-                        Ctx: {contextTokens.toLocaleString()}
+
+
+                <div className="header-info-group">
+                    <div className="info-pill" title="Temperature">
+                        T: {temperature}
                     </div>
-                )}
+                    {reasoningEffort && (
+                        <div className="info-pill" title="Reasoning Effort">
+                            R: {reasoningEffort}
+                        </div>
+                    )}
+                    {contextTokens !== undefined && contextTokens > 0 && (
+                        <div className="info-pill" title="Context Tokens">
+                            Ctx: {contextTokens.toLocaleString()}
+                        </div>
+                    )}
+                </div>
             </header>
 
             <ChatControls
@@ -163,73 +183,69 @@ export function MainChat({
                 onSystemPromptChange={onSystemPromptChange || (() => { })}
                 temperature={temperature}
                 onTemperatureChange={onTemperatureChange || (() => { })}
+                reasoningEffort={reasoningEffort}
+                onReasoningEffortChange={onReasoningEffortChange}
             />
 
-            {messages.length === 0 ? (
-                <div className="messages-scroll-area">
-                    <div className="empty-state">
-                        <h1>AI Chat</h1>
-                        <p>Ask anything. I am ready.</p>
+            {
+                messages.length === 0 ? (
+                    <div className="messages-scroll-area">
+                        <div className="empty-state">
+                            <h1>AI Chat</h1>
+                            <p>Ask anything. I am ready.</p>
+                        </div>
                     </div>
-                </div>
-            ) : (
-                <Virtuoso
-                    className="messages-scroll-area"
-                    ref={virtuosoRef}
-                    data={messages}
-                    atBottomStateChange={(isAtBottom) => {
-                        setAtBottom(isAtBottom);
-                        setShowScrollButton(!isAtBottom);
-                    }}
-                    followOutput={atBottom ? 'smooth' : false}
-                    itemContent={(index, msg) => (
-                        <MessageBubble
-                            key={index}
-                            role={msg.role}
-                            content={msg.content}
-                            images={msg.images}
-                            onImageClick={setLightboxImage}
-                            stats={msg.stats}
-                            isStreaming={isLoading && index === messages.length - 1 && msg.role === 'assistant'}
-                            onRegenerate={
-                                !isLoading &&
-                                    onRegenerate &&
-                                    index === messages.length - 1 &&
-                                    msg.role === 'assistant'
-                                    ? onRegenerate
-                                    : undefined
-                            }
-                            onDelete={
-                                !isLoading &&
-                                    onDeleteMessage &&
-                                    msg.role === 'user' &&
-                                    index === messages.length - 1
-                                    ? () => onDeleteMessage(index)
-                                    : undefined
-                            }
-                        />
-                    )}
-                    components={{
-                        Footer: () => isLoading ? (
-                            <div className="loading-indicator">
-                                <span className="dot"></span>
-                                <span className="dot"></span>
-                                <span className="dot"></span>
+                ) : (
+                    <Virtuoso
+                        className="messages-scroll-area"
+                        ref={virtuosoRef}
+                        data={messages}
+                        atBottomStateChange={(isAtBottom) => {
+                            setAtBottom(isAtBottom);
+                            setShowScrollButton(!isAtBottom);
+                        }}
+                        followOutput={atBottom ? 'smooth' : false}
+                        itemContent={(index, msg) => (
+                            <div style={{ marginBottom: 24, paddingBottom: 12 }}>
+                                <MessageBubble
+                                    role={msg.role}
+                                    content={msg.content}
+                                    images={msg.images}
+                                    stats={msg.stats}
+                                    onImageClick={(src) => setLightboxImage(src)}
+                                    onRegenerate={msg.role === 'assistant' && index === messages.length - 1 && !isLoading ? onRegenerate : undefined}
+                                    isStreaming={msg.role === 'assistant' && index === messages.length - 1 && isLoading}
+                                    onDelete={onDeleteMessage ? () => onDeleteMessage(index) : undefined}
+                                    siblings={msg.siblings}
+                                    siblingIndex={msg.siblingIndex}
+                                    onVersionChange={onVersionChange ? (idx) => onVersionChange(index, idx) : undefined}
+                                />
                             </div>
-                        ) : <div style={{ height: 20 }} />
-                    }}
-                />
-            )}
+                        )}
+                        components={{
+                            Footer: () => isLoading ? (
+                                <div className="loading-indicator">
+                                    <span className="dot"></span>
+                                    <span className="dot"></span>
+                                    <span className="dot"></span>
+                                </div>
+                            ) : <div style={{ height: 20 }} />
+                        }}
+                    />
+                )
+            }
 
-            {showScrollButton && (
-                <button
-                    className="scroll-bottom-btn"
-                    onClick={scrollToBottom}
-                    aria-label="Scroll to bottom"
-                >
-                    <ArrowDown size={20} />
-                </button>
-            )}
+            {
+                showScrollButton && (
+                    <button
+                        className="scroll-bottom-btn"
+                        onClick={scrollToBottom}
+                        aria-label="Scroll to bottom"
+                    >
+                        <ArrowDown size={20} />
+                    </button>
+                )
+            }
             <div className="input-area-wrapper">
                 <ChatInput
                     onSend={onSendMessage}
@@ -239,13 +255,15 @@ export function MainChat({
                 />
             </div>
 
-            {lightboxImage && (
-                <ImageLightbox
-                    src={lightboxImage}
-                    onClose={() => setLightboxImage(null)}
-                />
-            )}
-        </main>
+            {
+                lightboxImage && (
+                    <ImageLightbox
+                        src={lightboxImage}
+                        onClose={() => setLightboxImage(null)}
+                    />
+                )
+            }
+        </main >
     );
 }
 
