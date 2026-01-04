@@ -10,7 +10,7 @@ interface ChatControlsProps {
     temperature: number;
     onTemperatureChange: (val: number) => void;
     reasoningEffort?: 'low' | 'medium' | 'high';
-    onReasoningEffortChange?: (val: 'low' | 'medium' | 'high') => void;
+    onReasoningEffortChange?: (val: 'low' | 'medium' | 'high' | undefined) => void;
     onSave?: () => void;
 }
 
@@ -79,7 +79,7 @@ export function ChatControls({
                         <div className="effort-group">
                             <button
                                 className={`effort-btn ${!reasoningEffort ? 'active' : ''}`}
-                                onClick={() => onReasoningEffortChange(undefined as any)}
+                                onClick={() => onReasoningEffortChange(undefined)}
                                 title="Default"
                             >
                                 Default

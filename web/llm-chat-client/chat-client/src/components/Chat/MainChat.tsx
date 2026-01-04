@@ -6,19 +6,7 @@ import './MainChat.css';
 import { ArrowDown, ChevronDown, Check, RefreshCw, PanelLeft, SlidersHorizontal } from 'lucide-react';
 import { ImageLightbox } from './ImageLightbox';
 import { ChatControls } from './ChatControls';
-
-interface Message {
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-    images?: string[];
-    stats?: {
-        tokensPerSecond: number;
-        totalTokens: number;
-        generationTime: number;
-    };
-    siblings?: Message[];
-    siblingIndex?: number;
-}
+import type { Message } from '../../lib/db';
 
 interface MainChatProps {
     messages: Message[];
@@ -40,7 +28,7 @@ interface MainChatProps {
     temperature?: number;
     onTemperatureChange?: (val: number) => void;
     reasoningEffort?: 'low' | 'medium' | 'high';
-    onReasoningEffortChange?: (val: 'low' | 'medium' | 'high') => void;
+    onReasoningEffortChange?: (val: 'low' | 'medium' | 'high' | undefined) => void;
     onVersionChange?: (messageIndex: number, newVersionIndex: number) => void;
 }
 

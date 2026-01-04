@@ -10,6 +10,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './MessageBubble.css';
 import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, FileText, Trash2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
+import type { Message } from '../../lib/db';
 
 const CodeBlock = ({ language, children, ...props }: any) => {
     const [isCopied, setIsCopied] = useState(false);
@@ -58,7 +59,7 @@ interface MessageBubbleProps {
     onRegenerate?: () => void;
     isStreaming?: boolean;
     onDelete?: () => void;
-    siblings?: { content: string; stats?: any }[];
+    siblings?: Message[];
     siblingIndex?: number;
     onVersionChange?: (index: number) => void;
 }

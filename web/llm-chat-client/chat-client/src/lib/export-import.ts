@@ -1,21 +1,40 @@
 import type { ChatSession } from './db';
 
 // Format for the exported file
+interface ExportSession extends Omit<ChatSession, 'messages'> {
+    messages: OpenAIMessage[];
+}
+
 interface ExportFile {
     version: number;
     type: 'ai-chat-export';
-    data: ChatSession | ChatSession[];
+    data: ExportSession | ExportSession[];
 }
 
 const EXPORT_VERSION = 1;
 
+// OpenAI Format Interfaces
+interface OpenAIMessageContentPart {
+    type: 'text' | 'image_url';
+    text?: string;
+    image_url?: { url: string };
+}
+
+interface OpenAIMessage {
+    role: 'user' | 'assistant' | 'system';
+    content: string | OpenAIMessageContentPart[];
+    name?: string;
+    // We allow extra fields (stats, etc) to pass through
+    [key: string]: any;
+}
+
 // Helper to convert internal Message to OpenAI-compatible format
-function toOpenAIFormat(session: ChatSession): any {
+function toOpenAIFormat(session: ChatSession): ExportSession {
     const messages = session.messages.map(msg => {
-        // If no images, return as is (but remove internal stats if strictly needed, though keeping them might be useful)
+        // If no images, return as is (but cast to compatible type)
         if (!msg.images || msg.images.length === 0) {
             const { images, ...rest } = msg;
-            return rest;
+            return rest as OpenAIMessage;
         }
 
         // If images exist, convert content to array format
@@ -24,13 +43,13 @@ function toOpenAIFormat(session: ChatSession): any {
             content: [
                 { type: 'text', text: msg.content },
                 ...msg.images.map(img => ({
-                    type: 'image_url',
+                    type: 'image_url' as const,
                     image_url: { url: img }
                 }))
             ],
             // Preserve stats if needed, or remove
             stats: msg.stats
-        };
+        } as OpenAIMessage;
     });
 
     return {
@@ -41,7 +60,7 @@ function toOpenAIFormat(session: ChatSession): any {
 
 // Helper to convert OpenAI-compatible format back to internal Message
 function fromOpenAIFormat(session: any): ChatSession {
-    const messages = session.messages.map((msg: any) => {
+    const messages = session.messages.map((msg: OpenAIMessage) => {
         // If content is string, it's standard or legacy internal
         if (typeof msg.content === 'string') {
             return msg;
@@ -52,10 +71,10 @@ function fromOpenAIFormat(session: any): ChatSession {
             let textContent = '';
             const images: string[] = [];
 
-            msg.content.forEach((part: any) => {
-                if (part.type === 'text') {
+            msg.content.forEach((part: OpenAIMessageContentPart) => {
+                if (part.type === 'text' && part.text) {
                     textContent += part.text;
-                } else if (part.type === 'image_url') {
+                } else if (part.type === 'image_url' && part.image_url) {
                     images.push(part.image_url.url);
                 }
             });

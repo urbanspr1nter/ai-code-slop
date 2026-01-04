@@ -1,13 +1,7 @@
 import { Plus, MessageSquare, Settings, PanelLeftClose, Trash2, Edit2, Star, Download, Upload, CheckSquare, X, Square } from 'lucide-react';
 import './Sidebar.css';
 import { useState, useEffect } from 'react';
-
-interface ChatSession {
-    id: string;
-    title: string;
-    date: Date;
-    isFavorite?: boolean;
-}
+import type { ChatSession } from '../../lib/db';
 
 interface SidebarProps {
     isOpen: boolean;

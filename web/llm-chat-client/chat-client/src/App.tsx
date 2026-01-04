@@ -43,7 +43,7 @@ function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.data && Array.isArray(data.data)) {
-          const loadedModels = data.data.map((m: any) => m.id);
+          const loadedModels = data.data.map((m: { id: string }) => m.id);
           setAvailableModels(loadedModels);
 
           // If current model is not in the new list, switch to the first available one
