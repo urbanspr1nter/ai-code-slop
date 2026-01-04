@@ -30,6 +30,9 @@ interface MainChatProps {
     reasoningEffort?: 'low' | 'medium' | 'high';
     onReasoningEffortChange?: (val: 'low' | 'medium' | 'high' | undefined) => void;
     onVersionChange?: (messageIndex: number, newVersionIndex: number) => void;
+    availableServers?: string[];
+    onServerSelect?: (serverUrl: string) => void;
+    currentServerUrl?: string;
 }
 
 export function MainChat({
@@ -53,20 +56,28 @@ export function MainChat({
     onTemperatureChange,
     reasoningEffort,
     onReasoningEffortChange,
-    onVersionChange
+    onVersionChange,
+    availableServers,
+    onServerSelect,
+    currentServerUrl
 }: MainChatProps) {
     const virtuosoRef = useRef<VirtuosoHandle>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [atBottom, setAtBottom] = useState(true);
     const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+    const [isServerMenuOpen, setIsServerMenuOpen] = useState(false);
     const [isControlsOpen, setIsControlsOpen] = useState(false);
     const [lightboxImage, setLightboxImage] = useState<string | null>(null);
     const modelMenuRef = useRef<HTMLDivElement>(null);
+    const serverMenuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (modelMenuRef.current && !modelMenuRef.current.contains(event.target as Node)) {
                 setIsModelMenuOpen(false);
+            }
+            if (serverMenuRef.current && !serverMenuRef.current.contains(event.target as Node)) {
+                setIsServerMenuOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
@@ -92,20 +103,61 @@ export function MainChat({
                             <PanelLeft size={20} />
                         </button>
                     )}
-                    <div className="model-selector-wrapper" ref={modelMenuRef}>
-                        {availableModels && availableModels.length > 0 ? (
+                    <div className="header-controls-group">
+                        {availableServers && availableServers.length > 0 && (
+                            <div className="server-selector-wrapper" ref={serverMenuRef}>
+                                <div className="custom-select-container">
+                                    <button
+                                        className={`model-trigger ${isServerMenuOpen ? 'active' : ''}`}
+                                        onClick={() => !isLoading && setIsServerMenuOpen(!isServerMenuOpen)}
+                                        disabled={isLoading}
+                                        title="Select API Server"
+                                        style={{ marginRight: '8px' }}
+                                    >
+                                        <span className="current-model-name" style={{ maxWidth: '150px' }}>
+                                            {currentServerUrl ? new URL(currentServerUrl).hostname : 'Select Server'}
+                                        </span>
+                                        <ChevronDown className="select-icon" size={14} />
+                                    </button>
+
+                                    {isServerMenuOpen && (
+                                        <div className="model-dropdown-menu">
+                                            {availableServers.map(s => (
+                                                <button
+                                                    key={s}
+                                                    className={`model-option ${s === currentServerUrl ? 'selected' : ''}`}
+                                                    onClick={() => {
+                                                        onServerSelect?.(s);
+                                                        setIsServerMenuOpen(false);
+                                                    }}
+                                                    title={s}
+                                                >
+                                                    {s}
+                                                    {s === currentServerUrl && <Check size={14} className="check-icon" />}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="model-selector-wrapper" ref={modelMenuRef}>
                             <div className="custom-select-container">
                                 <button
                                     className={`model-trigger ${isModelMenuOpen ? 'active' : ''}`}
-                                    onClick={() => !isLoading && setIsModelMenuOpen(!isModelMenuOpen)}
-                                    disabled={isLoading}
-                                    title="Select LLM Model"
+                                    onClick={() => !isLoading && availableModels && availableModels.length > 0 && setIsModelMenuOpen(!isModelMenuOpen)}
+                                    disabled={isLoading || !availableModels || availableModels.length === 0}
+                                    title={availableModels && availableModels.length > 0 ? "Select LLM Model" : "No models available (Server down?)"}
+                                    style={{ opacity: (!availableModels || availableModels.length === 0) ? 0.6 : 1, cursor: (!availableModels || availableModels.length === 0) ? 'not-allowed' : 'pointer' }}
                                 >
-                                    <span className="current-model-name">{selectedModel}</span>
+                                    <span className="current-model-name">
+                                        {availableModels && availableModels.length > 0 ? selectedModel : 'No models available'}
+                                    </span>
                                     <ChevronDown className="select-icon" size={14} />
                                 </button>
 
-                                {isModelMenuOpen && (
+                                {isModelMenuOpen && availableModels && availableModels.length > 0 && (
                                     <div className="model-dropdown-menu">
                                         {availableModels.map(m => (
                                             <button
@@ -123,19 +175,17 @@ export function MainChat({
                                     </div>
                                 )}
                             </div>
-                        ) : (
-                            <div className="model-name-static">{selectedModel || 'AI Chat'}</div>
-                        )}
-                        {onRefreshModels && (
-                            <button
-                                className="refresh-models-btn"
-                                onClick={onRefreshModels}
-                                title="Refresh Models"
-                                disabled={isLoading}
-                            >
-                                <RefreshCw size={14} />
-                            </button>
-                        )}
+                            {onRefreshModels && (
+                                <button
+                                    className="refresh-models-btn"
+                                    onClick={onRefreshModels}
+                                    title="Refresh Models"
+                                    disabled={isLoading}
+                                >
+                                    <RefreshCw size={14} />
+                                </button>
+                            )}
+                        </div>
                     </div>
                     <button
                         className={`chat-controls-toggle ${isControlsOpen ? 'active' : ''}`}
@@ -254,4 +304,3 @@ export function MainChat({
         </main >
     );
 }
-

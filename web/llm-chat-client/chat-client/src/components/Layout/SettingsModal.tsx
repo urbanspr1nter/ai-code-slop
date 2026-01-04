@@ -1,4 +1,4 @@
-import { X, Save } from 'lucide-react';
+import { X, Save, Trash2, Plus } from 'lucide-react';
 import './SettingsModal.css';
 import { useState, useEffect } from 'react';
 
@@ -10,7 +10,8 @@ interface SettingsModalProps {
     currentSystemPrompt: string;
     currentTemperature: number;
     currentReasoningEffort?: 'low' | 'medium' | 'high';
-    onSave: (apiUrl: string, model: string, systemPrompt: string, temperature: number, reasoningEffort?: 'low' | 'medium' | 'high') => void;
+    savedServers?: string[];
+    onSave: (apiUrl: string, model: string, systemPrompt: string, temperature: number, reasoningEffort: 'low' | 'medium' | 'high' | undefined, servers: string[]) => void;
 }
 
 export function SettingsModal({
@@ -21,6 +22,7 @@ export function SettingsModal({
     currentSystemPrompt,
     currentTemperature,
     currentReasoningEffort,
+    savedServers = [],
     onSave
 }: SettingsModalProps) {
     const [apiUrl, setApiUrl] = useState(currentApiUrl);
@@ -28,6 +30,7 @@ export function SettingsModal({
     const [systemPrompt, setSystemPrompt] = useState(currentSystemPrompt);
     const [temperature, setTemperature] = useState(currentTemperature);
     const [reasoningEffort, setReasoningEffort] = useState(currentReasoningEffort);
+    const [servers, setServers] = useState<string[]>(savedServers);
 
     // Reset local state when modal opens with new props
     useEffect(() => {
@@ -36,13 +39,24 @@ export function SettingsModal({
         setSystemPrompt(currentSystemPrompt);
         setTemperature(currentTemperature);
         setReasoningEffort(currentReasoningEffort);
-    }, [isOpen, currentApiUrl, currentModel, currentSystemPrompt, currentTemperature, currentReasoningEffort]);
+        setServers(savedServers);
+    }, [isOpen, currentApiUrl, currentModel, currentSystemPrompt, currentTemperature, currentReasoningEffort, savedServers]);
 
     if (!isOpen) return null;
 
     const handleSave = () => {
-        onSave(apiUrl, model, systemPrompt, temperature, reasoningEffort);
+        onSave(apiUrl, model, systemPrompt, temperature, reasoningEffort, servers);
         onClose();
+    };
+
+    const handleAddServer = () => {
+        if (apiUrl && !servers.includes(apiUrl)) {
+            setServers([...servers, apiUrl]);
+        }
+    };
+
+    const handleRemoveServer = (server: string) => {
+        setServers(servers.filter(s => s !== server));
     };
 
     return (
@@ -58,12 +72,48 @@ export function SettingsModal({
                 <div className="modal-body">
                     <div className="form-group">
                         <label>API Endpoint (Base URL)</label>
-                        <input
-                            type="text"
-                            value={apiUrl}
-                            onChange={(e) => setApiUrl(e.target.value)}
-                            placeholder="http://localhost:8000/v1"
-                        />
+                        <div className="url-input-group" style={{ display: 'flex', gap: '8px' }}>
+                            <input
+                                type="text"
+                                value={apiUrl}
+                                onChange={(e) => setApiUrl(e.target.value)}
+                                placeholder="http://localhost:8000/v1"
+                                style={{ flex: 1 }}
+                            />
+                            <button
+                                className="icon-btn"
+                                onClick={handleAddServer}
+                                title="Save this server to list"
+                                style={{ padding: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-primary)' }}
+                            >
+                                <Plus size={18} />
+                            </button>
+                        </div>
+
+                        {servers.length > 0 && (
+                            <div className="saved-servers" style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Saved Servers:</label>
+                                {servers.map(server => (
+                                    <div key={server} className="server-item" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: 'var(--bg-secondary)', borderRadius: '4px', fontSize: '0.9rem' }}>
+                                        <span
+                                            onClick={() => setApiUrl(server)}
+                                            style={{ cursor: 'pointer', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                            title="Click to use this server"
+                                        >
+                                            {server}
+                                        </span>
+                                        <button
+                                            onClick={() => handleRemoveServer(server)}
+                                            style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}
+                                            title="Remove server"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
                         <p className="help-text">
                             The full URL to the completions endpoint will be constructed from this.
                         </p>

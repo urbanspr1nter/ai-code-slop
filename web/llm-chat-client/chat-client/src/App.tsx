@@ -46,7 +46,8 @@ function App() {
     availableModels,
     updateSettings,
     fetchModels,
-    setModelName
+    setModelName,
+    serverEndpoints
   } = useAppSettings();
 
   // Active Chat Settings (initialized from defaults when new chat starts)
@@ -517,7 +518,7 @@ function App() {
             // The current `saveSettings` call in original code did ONLY global settings update.
             // But if we want per-chat model persistence (not currently in ChatSession interface?), we'd add it there.
             // Current implementation only has global model.
-            updateSettings({ apiUrl, modelName: newModel, defaultSystemPrompt, defaultTemperature, defaultReasoningEffort });
+            updateSettings({ apiUrl, modelName: newModel, defaultSystemPrompt, defaultTemperature, defaultReasoningEffort, serverEndpoints });
           }}
           reasoningEffort={reasoningEffort}
           onReasoningEffortChange={async (val) => {
@@ -549,6 +550,11 @@ function App() {
               }
             }
           }}
+          availableServers={serverEndpoints}
+          currentServerUrl={apiUrl}
+          onServerSelect={(newServerUrl) => {
+            updateSettings({ apiUrl: newServerUrl });
+          }}
         />
       </div>
 
@@ -560,13 +566,15 @@ function App() {
         currentSystemPrompt={defaultSystemPrompt}
         currentTemperature={defaultTemperature}
         currentReasoningEffort={defaultReasoningEffort}
-        onSave={async (url, model, sysPrompt, temp, effort) => {
+        savedServers={serverEndpoints}
+        onSave={async (url, model, sysPrompt, temp, effort, servers) => {
           await updateSettings({
             apiUrl: url,
             modelName: model,
             defaultSystemPrompt: sysPrompt,
             defaultTemperature: temp,
-            defaultReasoningEffort: effort
+            defaultReasoningEffort: effort,
+            serverEndpoints: servers
           });
 
           // If no chat is active, update the current view to match the new defaults.

@@ -45,6 +45,7 @@ export interface AppSettings {
     systemPrompt: string;
     temperature: number;
     reasoningEffort?: 'low' | 'medium' | 'high';
+    serverEndpoints?: string[]; // List of saved API URLs
 }
 
 const DB_NAME = 'ai-chat-db';
