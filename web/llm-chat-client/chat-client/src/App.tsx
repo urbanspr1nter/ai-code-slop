@@ -2,10 +2,13 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Sidebar } from './components/Layout/Sidebar';
 import { MainChat } from './components/Chat/MainChat';
 import { SettingsModal } from './components/Layout/SettingsModal';
-import { saveSession, getSessions, deleteSession, getSession, saveSettings, getSettings, toggleFavorite } from './lib/db';
+import { getSession } from './lib/db';
 
 import type { ChatSession, Message } from './lib/db';
 import { exportChat, exportChats, importChats } from './lib/export-import';
+import { streamCompletion } from './lib/llm';
+import { useAppSettings } from './hooks/useAppSettings';
+import { useChatHistory } from './hooks/useChatHistory';
 import './App.css';
 
 function App() {
@@ -19,77 +22,59 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
-  // State for all history
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  // Chat History Hook
+  const {
+    sessions,
+    addSession,
+    updateSession,
+    removeSession,
+    renameSession,
+    toggleSessionFavorite,
+    bulkDeleteSessions,
+    importSessions
+  } = useChatHistory();
 
   const [isLoading, setIsLoading] = useState(false);
 
-  // Connection Settings
-  const [apiUrl, setApiUrl] = useState('http://192.168.1.29:8000/v1');
-  const [modelName, setModelName] = useState('Qwen3-4B-Thinking-2507');
-  const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.');
-  const [defaultSystemPrompt, setDefaultSystemPrompt] = useState('You are a helpful assistant.');
-  const [temperature, setTemperature] = useState(0.7);
-  const [defaultTemperature, setDefaultTemperature] = useState(0.7);
-  const [reasoningEffort, setReasoningEffort] = useState<'low' | 'medium' | 'high' | undefined>(undefined);
-  const [defaultReasoningEffort, setDefaultReasoningEffort] = useState<'low' | 'medium' | 'high' | undefined>(undefined);
+  // Global Settings Hook
+  const {
+    apiUrl,
+    modelName,
+    defaultSystemPrompt,
+    defaultTemperature,
+    defaultReasoningEffort,
+    availableModels,
+    updateSettings,
+    fetchModels,
+    setModelName
+  } = useAppSettings();
 
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  // Active Chat Settings (initialized from defaults when new chat starts)
+  const [systemPrompt, setSystemPrompt] = useState(defaultSystemPrompt);
+  const [temperature, setTemperature] = useState(defaultTemperature);
+  const [reasoningEffort, setReasoningEffort] = useState(defaultReasoningEffort);
 
-  const fetchModels = async () => {
-    try {
-      const url = apiUrl.replace(/\/$/, '') + '/models';
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.data && Array.isArray(data.data)) {
-          const loadedModels = data.data.map((m: { id: string }) => m.id);
-          setAvailableModels(loadedModels);
+  // Sync active chat settings when defaults change (only if we are NOT in an active chat? 
+  // Or should we trust the initial state setter?
+  // React useState initial value is only used on first render. 
+  // So we need effects to update these if the defaults load async)
 
-          // If current model is not in the new list, switch to the first available one
-          if (loadedModels.length > 0 && !loadedModels.includes(modelName)) {
-            const newDefault = loadedModels[0];
-            setModelName(newDefault);
-            saveSettings({ apiUrl, modelName: newDefault, systemPrompt, temperature, reasoningEffort });
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to fetch models:', err);
+  // Actually, we need to handle the async load.
+  // The hook does the loading. But the component renders immediately.
+  // We can add a "settingsLoaded" flag to the hook, or just use an effect here to sync provided specific conditions are met.
+
+  // Simple approach: When defaults change, updating the "New Chat" values is fine. 
+  // But updating current state variables might overwrite user intent if they are editing them for a NEW chat.
+  // However, since `systemPrompt` is just state, let's keep it simple.
+
+  useEffect(() => {
+    // If we are effectively in a "reset" state (no chat ID), sync with defaults
+    if (!currentChatId) {
+      setSystemPrompt(defaultSystemPrompt);
+      setTemperature(defaultTemperature);
+      setReasoningEffort(defaultReasoningEffort);
     }
-  };
-
-  useEffect(() => {
-    if (apiUrl) fetchModels();
-  }, [apiUrl]);
-
-  // Load history and settings on mount
-  useEffect(() => {
-    const loadData = async () => {
-      const [loadedSessions, loadedSettings] = await Promise.all([
-        getSessions(),
-        getSettings()
-      ]);
-      setSessions(loadedSessions);
-      if (loadedSettings) {
-        setApiUrl(loadedSettings.apiUrl);
-        setModelName(loadedSettings.modelName);
-        // Default system prompt comes from global settings
-        setDefaultSystemPrompt(loadedSettings.systemPrompt);
-        setSystemPrompt(loadedSettings.systemPrompt);
-
-        setDefaultTemperature(loadedSettings.temperature);
-        setTemperature(loadedSettings.temperature);
-
-        setDefaultReasoningEffort(loadedSettings.reasoningEffort);
-        setReasoningEffort(loadedSettings.reasoningEffort);
-      }
-    };
-    loadData();
-  }, []);
-
-  // Save session whenever it updates (debounced ideally, but straightforward for now)
-  // We'll hook into key update points instead of partial effects to be safer
+  }, [defaultSystemPrompt, defaultTemperature, defaultReasoningEffort, currentChatId]);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
@@ -113,14 +98,7 @@ function App() {
       const sessionToSave = sessions.find(s => s.id === currentChatId);
       if (sessionToSave) {
         const updatedSession = { ...sessionToSave, messages: messages, systemPrompt, temperature, reasoningEffort };
-
-        // Update local state
-        setSessions(prev => prev.map(s =>
-          s.id === currentChatId ? updatedSession : s
-        ));
-
-        // Persist
-        await saveSession(updatedSession);
+        await updateSession(updatedSession);
       }
     }
 
@@ -140,14 +118,7 @@ function App() {
       const sessionToSave = sessions.find(s => s.id === currentChatId);
       if (sessionToSave) {
         const updatedSession = { ...sessionToSave, messages: messages, systemPrompt, temperature, reasoningEffort };
-
-        // Update local
-        setSessions(prev => prev.map(s =>
-          s.id === currentChatId ? updatedSession : s
-        ));
-
-        // Persist
-        await saveSession(updatedSession);
+        await updateSession(updatedSession);
       }
     }
 
@@ -178,219 +149,118 @@ function App() {
     setIsLoading(true);
     abortControllerRef.current = new AbortController();
 
-    try {
-      const endpoint = `${apiUrl.replace(/\/$/, '')}/chat/completions`;
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer none'
-        },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [
-            ...(systemPrompt ? [{ role: 'system', content: systemPrompt } as Message] : []),
-            ...messagesToUse
-          ].map((msg) => {
-            if (msg.role === 'user' && msg.images && msg.images.length > 0) {
-              return {
-                role: 'user',
-                content: [
-                  { type: 'text', text: msg.content },
-                  ...msg.images.map(img => ({
-                    type: 'image_url',
-                    image_url: { url: img }
-                  }))
-                ]
+    // Initialize assistant message if not targeting specific index
+    if (targetIndex === undefined) {
+      setMessages(prev => {
+        targetIndex = prev.length;
+        return [...prev, { role: 'assistant', content: '' }];
+      });
+    }
+
+    // Since state updates are async, we need to trust the targetIndex is valid for the NEXT render cycle
+    // We already queued the update above.
+
+    await streamCompletion({
+      apiUrl,
+      modelName,
+      messages: messagesToUse,
+      systemPrompt,
+      temperature,
+      reasoningEffort,
+      signal: abortControllerRef.current.signal,
+      onUpdate: (content, stats) => {
+        setMessages(prev => {
+          const next = [...prev];
+          // Determine index if it was undefined initially (it would be prev.length - 1 if we just added it)
+          // But effectively we captured `targetIndex` in closure.
+          // The issue is `targetIndex` variable above was mutated in a callback which doesn't affect this scope?
+          // Actually, let's fix the targetIndex logic.
+          const actualIndex = targetIndex !== undefined ? targetIndex : prev.length - 1;
+
+          if (next[actualIndex]) {
+            const msg = next[actualIndex];
+            msg.content = content;
+            msg.stats = {
+              totalTokens: stats.tokenCount,
+              generationTime: stats.duration,
+              tokensPerSecond: stats.tps
+            };
+
+            if (msg.siblings && msg.siblingIndex !== undefined) {
+              msg.siblings[msg.siblingIndex] = {
+                ...msg.siblings[msg.siblingIndex],
+                content: content,
+                stats: msg.stats
               };
             }
-            return { role: msg.role, content: msg.content };
-          }),
-          temperature: temperature,
-          reasoning_effort: reasoningEffort,
-          stream: true
-        }),
-        signal: abortControllerRef.current.signal
-      });
-
-      if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("Response body is null");
-
-      // Initialize assistant message if not targeting specific index
-      if (targetIndex === undefined) {
-        setMessages(prev => {
-          targetIndex = prev.length;
-          return [...prev, { role: 'assistant', content: '' }];
+          }
+          return next;
         });
-      }
+      },
+      onFinish: (content, stats) => {
+        let finalMessages: Message[] = [];
+        setMessages(prev => {
+          const next = [...prev];
+          const actualIndex = targetIndex !== undefined ? targetIndex : prev.length - 1;
 
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let accumulatedContent = '';
-
-      const startTime = Date.now();
-      let lastUiUpdate = 0;
-      let tokenCount = 0;
-      let hasStartedReasoning = false;
-      let hasEndedReasoning = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
-
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmedLine = line.trim();
-          if (!trimmedLine.startsWith('data: ')) continue;
-
-          const dataStr = trimmedLine.slice(6);
-          if (dataStr === '[DONE]') continue;
-
-          try {
-            const data = JSON.parse(dataStr);
-
-            const deltaContent = data.choices[0]?.delta?.content || '';
-            const deltaReasoning = data.choices[0]?.delta?.reasoning_content || data.choices[0]?.delta?.reasoning || '';
-
-            if (deltaReasoning) {
-              if (!hasStartedReasoning) {
-                accumulatedContent += "<think>";
-                hasStartedReasoning = true;
-              }
-              accumulatedContent += deltaReasoning;
-            }
-
-            if (deltaContent) {
-              if (hasStartedReasoning && !hasEndedReasoning) {
-                accumulatedContent += "</think>";
-                hasEndedReasoning = true;
-              }
-              accumulatedContent += deltaContent;
-            }
-
-            if (deltaContent || deltaReasoning) {
-              tokenCount++;
-
-              const currentTime = Date.now();
-              // Throttle UI updates to ~30fps (every 33ms) to reduce rendering jank
-              if (currentTime - lastUiUpdate > 33) {
-                const duration = (currentTime - startTime) / 1000;
-                const tps = duration > 0 ? tokenCount / duration : 0;
-
-                setMessages(prev => {
-                  const next = [...prev];
-                  if (targetIndex !== undefined && next[targetIndex]) {
-                    const msg = next[targetIndex];
-                    msg.content = accumulatedContent;
-                    msg.stats = {
-                      totalTokens: tokenCount,
-                      generationTime: duration,
-                      tokensPerSecond: tps
-                    };
-
-                    // Update sibling as well if it exists
-                    if (msg.siblings && msg.siblingIndex !== undefined) {
-                      msg.siblings[msg.siblingIndex] = {
-                        ...msg.siblings[msg.siblingIndex],
-                        content: accumulatedContent,
-                        stats: msg.stats
-                      };
-                    }
-                  }
-                  return next;
-                });
-                lastUiUpdate = currentTime;
-              }
-            }
-          } catch (e) {
-            console.error("Error parsing stream chunk:", e);
-          }
-        }
-      }
-
-      // Handle case where stream ended inside thought field without explicit end
-      if (hasStartedReasoning && !hasEndedReasoning) {
-        accumulatedContent += "</think>";
-      }
-
-      // Verify and set final message logic
-      abortControllerRef.current = null;
-
-      const finalDuration = (Date.now() - startTime) / 1000;
-      const finalTps = finalDuration > 0 ? tokenCount / finalDuration : 0;
-
-      // Force final update to ensure all content is visible
-      let finalMessages: Message[] = [];
-      setMessages(prev => {
-        const next = [...prev];
-        if (targetIndex !== undefined && next[targetIndex]) {
-          const msg = next[targetIndex];
-          msg.content = accumulatedContent;
-          msg.stats = {
-            totalTokens: tokenCount,
-            generationTime: finalDuration,
-            tokensPerSecond: finalTps
-          };
-          if (msg.siblings && msg.siblingIndex !== undefined) {
-            msg.siblings[msg.siblingIndex] = {
-              ...msg.siblings[msg.siblingIndex],
-              content: accumulatedContent,
-              stats: msg.stats
+          if (next[actualIndex]) {
+            const msg = next[actualIndex];
+            msg.content = content;
+            msg.stats = {
+              totalTokens: stats.tokenCount,
+              generationTime: stats.duration,
+              tokensPerSecond: stats.tps
             };
+            if (msg.siblings && msg.siblingIndex !== undefined) {
+              msg.siblings[msg.siblingIndex] = {
+                ...msg.siblings[msg.siblingIndex],
+                content: content,
+                stats: msg.stats
+              };
+            }
           }
+          finalMessages = next;
+          return next;
+        });
+
+        // Update session state via hook
+        if (sessionId) {
+          getSession(sessionId).then(freshSession => {
+            if (freshSession) {
+              const updated = { ...freshSession, messages: finalMessages };
+              updateSession(updated);
+            }
+          });
         }
-        finalMessages = next;
-        return next;
-      });
-
-      // Update local session state
-      setSessions(prev => prev.map(s =>
-        s.id === sessionId ? { ...s, messages: finalMessages } : s
-      ));
-
-      // Persist final message state
-      if (sessionId) {
-        try {
-          const freshSession = await getSession(sessionId);
-          if (freshSession) {
-            const updated = { ...freshSession, messages: finalMessages };
-            await saveSession(updated);
+        setIsLoading(false);
+        abortControllerRef.current = null;
+      },
+      onError: (error) => {
+        if (error.name === 'AbortError') {
+          console.log('Generation stopped by user');
+          return;
+        }
+        console.error("Chat Error:", error);
+        const errorMsg: Message = {
+          role: 'assistant',
+          content: `**Error**: ${error.message}`
+        };
+        setMessages(prev => {
+          const next = [...prev];
+          const actualIndex = targetIndex !== undefined ? targetIndex : prev.length - 1;
+          // If we were updating an existing one, replace/append error?
+          // Actually simpler to just update the content if we can, or append if we failed instantly.
+          if (targetIndex !== undefined && next[actualIndex]) {
+            next[actualIndex] = errorMsg;
+          } else {
+            next.push(errorMsg);
           }
-        } catch (e) { console.error("Failed to save final", e); }
+          return next;
+        });
+        setIsLoading(false);
+        abortControllerRef.current = null;
       }
-
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        console.log('Generation stopped by user');
-        return;
-      }
-      console.error("Chat Error:", error);
-      const errorMsg: Message = {
-        role: 'assistant',
-        content: `**Error**: ${(error as Error).message}`
-      };
-      setMessages(prev => {
-        const next = [...prev];
-        if (targetIndex !== undefined) {
-          next[targetIndex] = errorMsg;
-        } else {
-          next.push(errorMsg);
-        }
-        return next;
-      });
-    } finally {
-      setIsLoading(false);
-      abortControllerRef.current = null;
-    }
+    });
   };
 
   const handleSendMessage = async (content: string, images?: string[]) => {
@@ -406,18 +276,19 @@ function App() {
         id: activeSessionId,
         title: content.trim().substring(0, 30) + (content.length > 30 ? "..." : ""),
         date: new Date(),
-        messages: newMessages
+        messages: newMessages,
+        systemPrompt,
+        temperature,
+        reasoningEffort
       };
-      setSessions(prev => [newSession, ...prev]);
+      await addSession(newSession);
       setCurrentChatId(activeSessionId);
-      await saveSession(newSession);
     } else {
       // Update existing
-      setSessions(prev => prev.map(s =>
-        s.id === activeSessionId ? { ...s, messages: newMessages, systemPrompt, temperature, reasoningEffort } : s
-      ));
       const s = sessions.find(s => s.id === activeSessionId);
-      if (s) await saveSession({ ...s, messages: newMessages, systemPrompt, temperature, reasoningEffort });
+      if (s) {
+        await updateSession({ ...s, messages: newMessages, systemPrompt, temperature, reasoningEffort });
+      }
     }
 
     // Call Generation
@@ -490,25 +361,21 @@ function App() {
       const s = sessions.find(ss => ss.id === currentChatId);
       if (s) {
         const updatedSession = { ...s, messages: newMessages };
-        saveSession(updatedSession);
-        setSessions(prev => prev.map(ss => ss.id === currentChatId ? updatedSession : ss));
+        updateSession(updatedSession);
       }
     }
   };
 
   const handleDeleteChat = async (id: string) => {
-    // 1. Remove from DB
-    // Assuming deleteSession is imported from './lib/db'
-    // import { saveSession, getSessions, deleteSession } from './lib/db';
-    await deleteSession(id);
-
-    // 2. Remove from local state
-    setSessions(prev => prev.filter(s => s.id !== id));
+    await removeSession(id);
 
     // 3. If deleted chat was active, switch to new chat state
     if (currentChatId === id) {
       setCurrentChatId(null);
       setMessages([]);
+      setSystemPrompt(defaultSystemPrompt);
+      setTemperature(defaultTemperature);
+      setReasoningEffort(defaultReasoningEffort);
     }
   };
 
@@ -517,33 +384,20 @@ function App() {
     setMessages(updatedMessages);
 
     if (currentChatId) {
-      setSessions(prev => prev.map(s => s.id === currentChatId ? { ...s, messages: updatedMessages } : s));
       const session = sessions.find(s => s.id === currentChatId);
       if (session) {
-        await saveSession({ ...session, messages: updatedMessages });
+        // Use updateSession from hook, simpler than manual save
+        updateSession({ ...session, messages: updatedMessages });
       }
     }
   };
 
   const handleRenameChat = async (id: string, newTitle: string) => {
-    setSessions(prev => prev.map(s => s.id === id ? { ...s, title: newTitle } : s));
-    const session = await getSession(id);
-    if (session) {
-      await saveSession({ ...session, title: newTitle });
-    }
+    renameSession(id, newTitle);
   };
 
   const handleToggleFavorite = async (id: string) => {
-    setSessions(prev => {
-      const next = prev.map(s => s.id === id ? { ...s, isFavorite: !s.isFavorite } : s);
-      return next.sort((a, b) => {
-        if (!!a.isFavorite === !!b.isFavorite) {
-          return new Date(b.date).getTime() - new Date(a.date).getTime();
-        }
-        return a.isFavorite ? -1 : 1;
-      });
-    });
-    await toggleFavorite(id);
+    toggleSessionFavorite(id);
   };
 
   const handleExportChat = (id: string) => {
@@ -562,10 +416,7 @@ function App() {
   };
 
   const handleDeleteSelectedChats = async (ids: string[]) => {
-    // 1. Delete from DB
-    await Promise.all(ids.map(id => deleteSession(id)));
-    // 2. Update local state
-    setSessions(prev => prev.filter(s => !ids.includes(s.id)));
+    await bulkDeleteSessions(ids);
     // 3. If current chat was deleted, reset
     if (currentChatId && ids.includes(currentChatId)) {
       setMessages([]);
@@ -586,35 +437,27 @@ function App() {
 
     try {
       const importedSessions = await importChats(file);
-      let newSessions = [...sessions];
       let switchId = null;
 
-      for (const importedSession of importedSessions) {
-        // Check if session already exists
-        if (newSessions.some(s => s.id === importedSession.id)) {
-          // Handle collision - always duplicate for now
-          importedSession.id = `imported-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          importedSession.title += " (Imported)";
+      // Handle remapping
+      const processedImports = importedSessions.map(importedSession => {
+        if (sessions.some(s => s.id === importedSession.id)) {
+          return {
+            ...importedSession,
+            id: `imported-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            title: importedSession.title + " (Imported)"
+          };
         }
+        return importedSession;
+      });
 
-        await saveSession(importedSession);
-        newSessions.push(importedSession);
-        switchId = importedSession.id; // Switch to the last imported
-      }
+      await importSessions(processedImports);
 
-      setSessions(newSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-
-      // Switch to the last imported session
-      if (switchId && importedSessions.length === 1) {
-        const s = newSessions.find(x => x.id === switchId);
-        if (s) {
-          setCurrentChatId(s.id);
-          setMessages(s.messages);
-          setSystemPrompt(s.systemPrompt || defaultSystemPrompt);
-          setTemperature(s.temperature ?? defaultTemperature);
-        }
-      } else if (importedSessions.length > 1) {
-        alert(`Successfully imported ${importedSessions.length} chats.`);
+      if (processedImports.length === 1) {
+        switchId = processedImports[0].id;
+        handleSelectChat(switchId);
+      } else if (processedImports.length > 1) {
+        alert(`Successfully imported ${processedImports.length} chats.`);
       }
 
       // Clear input
@@ -670,7 +513,11 @@ function App() {
           onToggleSidebar={toggleSidebar}
           onModelSelect={(newModel) => {
             setModelName(newModel);
-            saveSettings({ apiUrl, modelName: newModel, systemPrompt: defaultSystemPrompt, temperature: defaultTemperature, reasoningEffort: defaultReasoningEffort });
+            // Updating model changes the global setting, we might want to also update the current session preference?
+            // The current `saveSettings` call in original code did ONLY global settings update.
+            // But if we want per-chat model persistence (not currently in ChatSession interface?), we'd add it there.
+            // Current implementation only has global model.
+            updateSettings({ apiUrl, modelName: newModel, defaultSystemPrompt, defaultTemperature, defaultReasoningEffort });
           }}
           reasoningEffort={reasoningEffort}
           onReasoningEffortChange={async (val) => {
@@ -678,9 +525,7 @@ function App() {
             if (currentChatId) {
               const s = sessions.find(ss => ss.id === currentChatId);
               if (s) {
-                const updated = { ...s, reasoningEffort: val };
-                setSessions(prev => prev.map(ss => ss.id === currentChatId ? updated : ss));
-                await saveSession(updated);
+                await updateSession({ ...s, reasoningEffort: val });
               }
             }
           }}
@@ -690,10 +535,7 @@ function App() {
             if (currentChatId) {
               const s = sessions.find(ss => ss.id === currentChatId);
               if (s) {
-                const updated = { ...s, systemPrompt: val };
-                setSessions(prev => prev.map(ss => ss.id === currentChatId ? updated : ss));
-                // Debounce save? For now direct save is okay for this complexity
-                await saveSession(updated);
+                await updateSession({ ...s, systemPrompt: val });
               }
             }
           }}
@@ -703,9 +545,7 @@ function App() {
             if (currentChatId) {
               const s = sessions.find(ss => ss.id === currentChatId);
               if (s) {
-                const updated = { ...s, temperature: val };
-                setSessions(prev => prev.map(ss => ss.id === currentChatId ? updated : ss));
-                await saveSession(updated);
+                await updateSession({ ...s, temperature: val });
               }
             }
           }}
@@ -721,24 +561,15 @@ function App() {
         currentTemperature={defaultTemperature}
         currentReasoningEffort={defaultReasoningEffort}
         onSave={async (url, model, sysPrompt, temp, effort) => {
-          setApiUrl(url);
-          setModelName(model);
-          setDefaultSystemPrompt(sysPrompt);
-          setDefaultTemperature(temp);
-          setDefaultReasoningEffort(effort);
-
-          // Always save to global settings
-          await saveSettings({
+          await updateSettings({
             apiUrl: url,
             modelName: model,
-            systemPrompt: sysPrompt,
-            temperature: temp,
-            reasoningEffort: effort
+            defaultSystemPrompt: sysPrompt,
+            defaultTemperature: temp,
+            defaultReasoningEffort: effort
           });
 
-          // If no chat is active, or if we want to live-update the current empty/default state?
-          // If a chat is active, we do NOT change its current prompt/temp.
-          // If NO chat is active (New Chat view), we SHOULD update the current view to match the new defaults.
+          // If no chat is active, update the current view to match the new defaults.
           if (!currentChatId) {
             setSystemPrompt(sysPrompt);
             setTemperature(temp);

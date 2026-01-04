@@ -76,7 +76,7 @@ export function SettingsModal({
                             rows={3}
                             value={systemPrompt}
                             onChange={(e) => setSystemPrompt(e.target.value)}
-                            placeholder="You are a helpful assistant."
+                            placeholder="Enter default system instructions..."
                             className="settings-textarea"
                         />
                     </div>

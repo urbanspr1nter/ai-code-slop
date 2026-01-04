@@ -54,7 +54,7 @@ export function ChatControls({
                     <textarea
                         value={systemPrompt}
                         onChange={(e) => onSystemPromptChange(e.target.value)}
-                        placeholder="You are a helpful assistant..."
+                        placeholder="Enter system instructions..."
                         rows={4}
                     />
                 </div>
