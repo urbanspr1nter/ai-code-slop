@@ -178,7 +178,7 @@ export function MainChat({
                             {onRefreshModels && (
                                 <button
                                     className="refresh-models-btn"
-                                    onClick={onRefreshModels}
+                                    onClick={() => onRefreshModels && onRefreshModels()}
                                     title="Refresh Models"
                                     disabled={isLoading}
                                 >
