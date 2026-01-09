@@ -80,33 +80,23 @@ export function MessageBubble({ role, content, images, onImageClick, stats, onRe
     const markdownComponents = useMemo(() => ({
         // Override pre to strip the outer container since we handle it in code
         pre: ({ children }: any) => <>{children}</>,
-        code({ node, inline, className, children, ...props }: any) {
+        code({ className, children, ...props }: any) {
             const match = /language-(\w+)/.exec(className || '');
             const language = match ? match[1] : '';
 
-            if (!inline && match) {
+            if (match) {
                 return (
                     <CodeBlock language={language} {...props}>
                         {children}
                     </CodeBlock>
                 );
-            } else if (!inline) {
-                // Regular code block without language
-                return (
-                    <pre className="code-block">
-                        <code className={className} {...props}>
-                            {children}
-                        </code>
-                    </pre>
-                );
-            } else {
-                // Inline code
-                return (
-                    <code className={className} {...props}>
-                        {children}
-                    </code>
-                );
             }
+
+            return (
+                <code className={className} {...props}>
+                    {children}
+                </code>
+            );
         }
     }), []);
 
