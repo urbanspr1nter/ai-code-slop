@@ -47,7 +47,9 @@ function App() {
     updateSettings,
     fetchModels,
     setModelName,
-    serverEndpoints
+    serverEndpoints,
+    streamingEnabled,
+    setStreamingEnabled
   } = useAppSettings();
 
   // Active Chat Settings (initialized from defaults when new chat starts)
@@ -169,6 +171,7 @@ function App() {
       temperature,
       reasoningEffort,
       signal: abortControllerRef.current.signal,
+      stream: streamingEnabled,
       onUpdate: (content, stats) => {
         setMessages(prev => {
           const next = [...prev];
@@ -555,6 +558,11 @@ function App() {
           onServerSelect={(newServerUrl) => {
             updateSettings({ apiUrl: newServerUrl });
           }}
+          streamingEnabled={streamingEnabled}
+          onStreamingToggle={(enabled) => {
+            setStreamingEnabled(enabled);
+            updateSettings({ streamingEnabled: enabled });
+          }}
         />
       </div>
 
@@ -566,15 +574,17 @@ function App() {
         currentSystemPrompt={defaultSystemPrompt}
         currentTemperature={defaultTemperature}
         currentReasoningEffort={defaultReasoningEffort}
+        currentStreamingEnabled={streamingEnabled}
         savedServers={serverEndpoints}
-        onSave={async (url, model, sysPrompt, temp, effort, servers) => {
+        onSave={async (url, model, sysPrompt, temp, effort, servers, streaming) => {
           await updateSettings({
             apiUrl: url,
             modelName: model,
             defaultSystemPrompt: sysPrompt,
             defaultTemperature: temp,
             defaultReasoningEffort: effort,
-            serverEndpoints: servers
+            serverEndpoints: servers,
+            streamingEnabled: streaming
           });
 
           // If no chat is active, update the current view to match the new defaults.

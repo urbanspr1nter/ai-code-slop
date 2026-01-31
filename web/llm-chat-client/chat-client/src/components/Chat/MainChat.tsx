@@ -33,6 +33,8 @@ interface MainChatProps {
     availableServers?: string[];
     onServerSelect?: (serverUrl: string) => void;
     currentServerUrl?: string;
+    streamingEnabled?: boolean;
+    onStreamingToggle?: (enabled: boolean) => void;
 }
 
 export function MainChat({
@@ -59,7 +61,9 @@ export function MainChat({
     onVersionChange,
     availableServers,
     onServerSelect,
-    currentServerUrl
+    currentServerUrl,
+    streamingEnabled = true,
+    onStreamingToggle
 }: MainChatProps) {
     const virtuosoRef = useRef<VirtuosoHandle>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -187,6 +191,17 @@ export function MainChat({
                             )}
                         </div>
                     </div>
+                    {onStreamingToggle && (
+                        <label className="streaming-toggle" title="Enable streaming responses">
+                            <input
+                                type="checkbox"
+                                checked={streamingEnabled}
+                                onChange={(e) => onStreamingToggle(e.target.checked)}
+                                disabled={isLoading}
+                            />
+                            <span className="streaming-label">Stream</span>
+                        </label>
+                    )}
                     <button
                         className={`chat-controls-toggle ${isControlsOpen ? 'active' : ''}`}
                         onClick={() => setIsControlsOpen(!isControlsOpen)}

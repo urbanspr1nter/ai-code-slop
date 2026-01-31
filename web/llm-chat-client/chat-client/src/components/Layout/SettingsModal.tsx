@@ -10,8 +10,9 @@ interface SettingsModalProps {
     currentSystemPrompt: string;
     currentTemperature: number;
     currentReasoningEffort?: 'low' | 'medium' | 'high';
+    currentStreamingEnabled?: boolean;
     savedServers?: string[];
-    onSave: (apiUrl: string, model: string, systemPrompt: string, temperature: number, reasoningEffort: 'low' | 'medium' | 'high' | undefined, servers: string[]) => void;
+    onSave: (apiUrl: string, model: string, systemPrompt: string, temperature: number, reasoningEffort: 'low' | 'medium' | 'high' | undefined, servers: string[], streamingEnabled: boolean) => void;
 }
 
 export function SettingsModal({
@@ -22,6 +23,7 @@ export function SettingsModal({
     currentSystemPrompt,
     currentTemperature,
     currentReasoningEffort,
+    currentStreamingEnabled = true,
     savedServers = [],
     onSave
 }: SettingsModalProps) {
@@ -30,6 +32,7 @@ export function SettingsModal({
     const [systemPrompt, setSystemPrompt] = useState(currentSystemPrompt);
     const [temperature, setTemperature] = useState(currentTemperature);
     const [reasoningEffort, setReasoningEffort] = useState(currentReasoningEffort);
+    const [streamingEnabled, setStreamingEnabled] = useState(currentStreamingEnabled);
     const [servers, setServers] = useState<string[]>(savedServers);
 
     // Reset local state when modal opens with new props
@@ -39,13 +42,14 @@ export function SettingsModal({
         setSystemPrompt(currentSystemPrompt);
         setTemperature(currentTemperature);
         setReasoningEffort(currentReasoningEffort);
+        setStreamingEnabled(currentStreamingEnabled);
         setServers(savedServers);
-    }, [isOpen, currentApiUrl, currentModel, currentSystemPrompt, currentTemperature, currentReasoningEffort, savedServers]);
+    }, [isOpen, currentApiUrl, currentModel, currentSystemPrompt, currentTemperature, currentReasoningEffort, currentStreamingEnabled, savedServers]);
 
     if (!isOpen) return null;
 
     const handleSave = () => {
-        onSave(apiUrl, model, systemPrompt, temperature, reasoningEffort, servers);
+        onSave(apiUrl, model, systemPrompt, temperature, reasoningEffort, servers, streamingEnabled);
         onClose();
     };
 
@@ -168,6 +172,20 @@ export function SettingsModal({
                                 </button>
                             ))}
                         </div>
+                    </div>
+
+                    <div className="form-group">
+                        <label className="toggle-label">
+                            <input
+                                type="checkbox"
+                                checked={streamingEnabled}
+                                onChange={(e) => setStreamingEnabled(e.target.checked)}
+                            />
+                            <span>Enable Streaming Responses</span>
+                        </label>
+                        <p className="help-text">
+                            When disabled, responses are returned all at once instead of streaming token by token. Useful for servers that don't support streaming.
+                        </p>
                     </div>
                 </div>
 

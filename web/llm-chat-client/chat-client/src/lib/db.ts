@@ -46,6 +46,7 @@ export interface AppSettings {
     temperature: number;
     reasoningEffort?: 'low' | 'medium' | 'high';
     serverEndpoints?: string[]; // List of saved API URLs
+    streamingEnabled?: boolean; // Whether to use streaming responses (default true)
 }
 
 const DB_NAME = 'ai-chat-db';

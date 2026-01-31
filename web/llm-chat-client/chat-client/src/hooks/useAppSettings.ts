@@ -8,6 +8,7 @@ export interface AppSettings {
     defaultTemperature: number;
     defaultReasoningEffort: 'low' | 'medium' | 'high' | undefined;
     serverEndpoints?: string[];
+    streamingEnabled?: boolean;
 }
 
 export function useAppSettings() {
@@ -17,6 +18,7 @@ export function useAppSettings() {
     const [defaultTemperature, setDefaultTemperature] = useState(0.7);
     const [defaultReasoningEffort, setDefaultReasoningEffort] = useState<'low' | 'medium' | 'high' | undefined>(undefined);
     const [serverEndpoints, setServerEndpoints] = useState<string[]>([]);
+    const [streamingEnabled, setStreamingEnabled] = useState(true);
     const [availableModels, setAvailableModels] = useState<string[]>([]);
 
     const fetchIdRef = useRef(0);
@@ -76,6 +78,9 @@ export function useAppSettings() {
                     endpoints.push(loadedSettings.apiUrl);
                 }
                 setServerEndpoints(endpoints);
+
+                // Load streaming preference (default true if not set)
+                setStreamingEnabled(loadedSettings.streamingEnabled ?? true);
             } else {
                 // If no settings yet, init with default API URL
                 setServerEndpoints(['http://192.168.1.29:8000/v1']);
@@ -104,6 +109,7 @@ export function useAppSettings() {
         if (newSettings.defaultTemperature !== undefined) setDefaultTemperature(newSettings.defaultTemperature);
         if (newSettings.defaultReasoningEffort !== undefined) setDefaultReasoningEffort(newSettings.defaultReasoningEffort);
         if (newSettings.serverEndpoints !== undefined) setServerEndpoints(newSettings.serverEndpoints);
+        if (newSettings.streamingEnabled !== undefined) setStreamingEnabled(newSettings.streamingEnabled);
 
         // Persist
         await saveSettings({
@@ -112,7 +118,8 @@ export function useAppSettings() {
             systemPrompt: newSettings.defaultSystemPrompt ?? defaultSystemPrompt,
             temperature: newSettings.defaultTemperature ?? defaultTemperature,
             reasoningEffort: newSettings.defaultReasoningEffort ?? defaultReasoningEffort,
-            serverEndpoints: newSettings.serverEndpoints ?? serverEndpoints
+            serverEndpoints: newSettings.serverEndpoints ?? serverEndpoints,
+            streamingEnabled: newSettings.streamingEnabled ?? streamingEnabled
         });
 
         // Special handling if API URL changed, refresh models immediately
@@ -128,6 +135,7 @@ export function useAppSettings() {
         defaultTemperature,
         defaultReasoningEffort,
         serverEndpoints,
+        streamingEnabled,
         availableModels,
         updateSettings,
         fetchModels,
@@ -136,6 +144,7 @@ export function useAppSettings() {
         setDefaultSystemPrompt,
         setDefaultTemperature,
         setDefaultReasoningEffort,
-        setServerEndpoints
+        setServerEndpoints,
+        setStreamingEnabled
     };
 }
