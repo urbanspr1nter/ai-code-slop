@@ -1,0 +1,68 @@
+appId: com.ai-studio.app
+productName: AI Studio
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - node_modules/**/*
+  - "!node_modules/**/{test,tests,__tests__,__mocks__}/**"
+  - "!node_modules/**/*.{md,ts,map}"
+  - "!node_modules/.cache/**"
+
+asar: true
+asarUnpack:
+  - "node_modules/better-sqlite3/**"
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.png
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: build/icons
+  category: Utility
+  maintainer: AI Studio
+
+deb:
+  depends:
+    - libgtk-3-0
+    - libnss3
+    - libatk-bridge2.0-0
+    - libgbm1
+    - libasound2t64
+
+appImage:
+  artifactName: "${productName}-${version}-${arch}.AppImage"
+
+publish: null

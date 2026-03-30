@@ -1,0 +1,38 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+out/
+release/
+
+# Electron
+*.asar
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+
+# SQLite dev databases
+*.db
+*.db-journal
+*.db-wal
+
+# Electron builder cache
+.electron-builder-cache/
