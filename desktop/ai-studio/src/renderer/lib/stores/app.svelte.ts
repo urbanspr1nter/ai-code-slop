@@ -23,6 +23,7 @@ export const appState = $state({
   promptProcessing: false,
   promptProcessingStartTime: 0,
   systemPromptVersion: 0,
+  mcpToolCount: 0,
   defaults: { endpointId: undefined, systemPromptId: undefined, samplingPresetId: undefined } as { endpointId?: string; systemPromptId?: string; samplingPresetId?: string },
   toasts: [] as { id: number; message: string; type: 'success' | 'error' }[],
 });
@@ -38,6 +39,13 @@ export function showToast(message: string, type: 'success' | 'error' = 'success'
 
 export async function loadFolders() {
   appState.folders = await window.api.listFolders();
+}
+
+export async function loadMcpToolCount() {
+  try {
+    const tools = await window.api.mcpGetTools();
+    appState.mcpToolCount = tools.length;
+  } catch { appState.mcpToolCount = 0; }
 }
 
 export async function loadDefaults() {
@@ -86,5 +94,6 @@ export async function initApp() {
     loadConversations(),
     loadSystemPrompts(),
     loadSamplingPresets(),
+    loadMcpToolCount(),
   ]);
 }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { appState, loadConversations, loadSystemPrompts, loadSamplingPresets, showToast } from '../stores/app.svelte';
+  import { appState, loadConversations, loadSystemPrompts, loadSamplingPresets, loadMcpToolCount, showToast } from '../stores/app.svelte';
   import { onMount } from 'svelte';
   import type { McpServerStatus, McpToolInfo } from '../../../shared/types';
 
@@ -148,6 +148,7 @@
       mcpServers = await window.api.mcpSaveConfig(mcpConfigText);
       mcpTools = await window.api.mcpGetTools();
       mcpEditing = false;
+      await loadMcpToolCount();
       showToast('MCP config saved');
     } catch (err: any) {
       mcpError = err.message;
@@ -162,6 +163,7 @@
     try {
       mcpServers = await window.api.mcpReconnect();
       mcpTools = await window.api.mcpGetTools();
+      await loadMcpToolCount();
     } catch (err: any) {
       mcpError = err.message;
     } finally {

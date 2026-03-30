@@ -66,14 +66,15 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   getDb();
-  createWindow();
 
-  // Connect MCP servers on startup
+  // Connect MCP servers before window loads so tools are ready
   try {
     await mcp.connectAll();
   } catch (err: any) {
     console.error('MCP startup error:', err.message);
   }
+
+  createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

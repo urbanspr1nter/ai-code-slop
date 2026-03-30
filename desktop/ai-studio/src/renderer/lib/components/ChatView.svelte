@@ -13,21 +13,6 @@
   let showScrollIndicator = $derived(isStreamingHere && !userAtBottom);
   let pendingImages = $state<MessageAttachment[]>([]);
   let draggingOver = $state(false);
-  let mcpToolCount = $state(0);
-
-  // Check MCP tool count
-  async function refreshMcpStatus() {
-    try {
-      const tools = await window.api.mcpGetTools();
-      mcpToolCount = tools.length;
-    } catch { mcpToolCount = 0; }
-  }
-
-  $effect(() => {
-    refreshMcpStatus();
-    // Re-check when systemPromptVersion bumps (MCP may have reconnected)
-    const _v = appState.systemPromptVersion;
-  });
   let toolActivity = $state<{ name: string; status: 'calling' | 'done'; arguments?: string; result?: string }[]>([]);
   let effectiveSystemPrompt = $state<string | null>(null);
   let systemPromptOpen = $state(false);
@@ -690,10 +675,10 @@
               Attach
             </button>
 
-            {#if mcpToolCount > 0}
-              <div class="flex items-center gap-1.5 text-xs text-text-muted" title="{mcpToolCount} MCP tools available">
+            {#if appState.mcpToolCount > 0}
+              <div class="flex items-center gap-1.5 text-xs text-text-muted" title="{appState.mcpToolCount} MCP tools available">
                 <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>MCP ({mcpToolCount})</span>
+                <span>MCP ({appState.mcpToolCount})</span>
               </div>
             {/if}
 
