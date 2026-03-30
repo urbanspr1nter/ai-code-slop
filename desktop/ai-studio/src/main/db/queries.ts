@@ -230,6 +230,12 @@ export function updateConversation(id: string, updates: Partial<Pick<Conversatio
     .run(title, endpointId, modelId, systemPromptId ?? null, samplingPresetId ?? null, folderId ?? null, Date.now(), id);
 }
 
+export function saveConversationStats(id: string, stats: any, toolActivity?: any): void {
+  getDb()
+    .prepare('UPDATE conversations SET last_stats = ?, last_tool_activity = ? WHERE id = ?')
+    .run(JSON.stringify(stats), toolActivity ? JSON.stringify(toolActivity) : null, id);
+}
+
 export function deleteConversation(id: string): void {
   getDb().prepare('DELETE FROM conversations WHERE id = ?').run(id);
 }
@@ -243,15 +249,14 @@ export function listMessages(conversationId: string): Message[] {
     .map(mapMessage);
 }
 
-export function createMessage(conversationId: string, role: string, content: string, attachments?: string, toolCallId?: string): Message {
+export function createMessage(conversationId: string, role: string, content: string, attachments?: string, toolCallId?: string, toolCallName?: string): Message {
   const id = randomUUID();
   const now = Date.now();
   getDb()
-    .prepare('INSERT INTO messages (id, conversation_id, role, content, attachments, tool_call_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(id, conversationId, role, content, attachments ?? null, toolCallId ?? null, now);
-  // Touch conversation updated_at
+    .prepare('INSERT INTO messages (id, conversation_id, role, content, attachments, tool_call_id, tool_call_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, conversationId, role, content, attachments ?? null, toolCallId ?? null, toolCallName ?? null, now);
   getDb().prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId);
-  return { id, conversationId, role: role as Message['role'], content, attachments: attachments ? JSON.parse(attachments) : undefined, toolCallId, createdAt: now };
+  return { id, conversationId, role: role as Message['role'], content, attachments: attachments ? JSON.parse(attachments) : undefined, toolCallId, toolCallName, createdAt: now };
 }
 
 export function updateMessage(id: string, content: string): void {
@@ -317,10 +322,14 @@ function mapFolder(row: any): Folder {
 }
 
 function mapConversation(row: any): Conversation {
+  let lastStats, lastToolActivity;
+  try { lastStats = row.last_stats ? JSON.parse(row.last_stats) : undefined; } catch { lastStats = undefined; }
+  try { lastToolActivity = row.last_tool_activity ? JSON.parse(row.last_tool_activity) : undefined; } catch { lastToolActivity = undefined; }
   return {
     id: row.id, title: row.title, endpointId: row.endpoint_id, modelId: row.model_id,
     systemPromptId: row.system_prompt_id, samplingPresetId: row.sampling_preset_id,
     folderId: row.folder_id ?? undefined,
+    lastStats, lastToolActivity,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -329,6 +338,7 @@ function mapMessage(row: any): Message {
   return {
     id: row.id, conversationId: row.conversation_id, role: row.role, content: row.content,
     attachments: row.attachments ? JSON.parse(row.attachments) : undefined,
-    toolCallId: row.tool_call_id, createdAt: row.created_at,
+    toolCallId: row.tool_call_id, toolCallName: row.tool_call_name,
+    createdAt: row.created_at,
   };
 }

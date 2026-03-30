@@ -37,10 +37,10 @@ function initSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS sampling_presets (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      temperature REAL NOT NULL DEFAULT 0.7,
+      temperature REAL NOT NULL DEFAULT 1.0,
       top_p REAL NOT NULL DEFAULT 0.9,
-      top_k INTEGER NOT NULL DEFAULT 40,
-      max_tokens INTEGER NOT NULL DEFAULT 4096,
+      top_k INTEGER NOT NULL DEFAULT 20,
+      max_tokens INTEGER NOT NULL DEFAULT 65536,
       repeat_penalty REAL NOT NULL DEFAULT 1.1,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
@@ -61,6 +61,8 @@ function initSchema(db: Database.Database) {
       system_prompt_id TEXT,
       sampling_preset_id TEXT,
       folder_id TEXT,
+      last_stats TEXT,
+      last_tool_activity TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
       FOREIGN KEY (endpoint_id) REFERENCES endpoints(id),
@@ -72,10 +74,11 @@ function initSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('system', 'user', 'assistant', 'tool')),
+      role TEXT NOT NULL CHECK(role IN ('system', 'user', 'assistant', 'tool', 'tool_call')),
       content TEXT NOT NULL,
       attachments TEXT,
       tool_call_id TEXT,
+      tool_call_name TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
@@ -88,6 +91,47 @@ function initSchema(db: Database.Database) {
   const cols = db.pragma('table_info(conversations)') as { name: string }[];
   if (!cols.some(c => c.name === 'folder_id')) {
     db.exec('ALTER TABLE conversations ADD COLUMN folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL');
+  }
+  if (!cols.some(c => c.name === 'last_stats')) {
+    db.exec('ALTER TABLE conversations ADD COLUMN last_stats TEXT');
+  }
+  if (!cols.some(c => c.name === 'last_tool_activity')) {
+    db.exec('ALTER TABLE conversations ADD COLUMN last_tool_activity TEXT');
+  }
+
+  // Migration: add tool_call_name + expand role CHECK to include 'tool_call'
+  const msgCols = db.pragma('table_info(messages)') as { name: string }[];
+  if (!msgCols.some(c => c.name === 'tool_call_name')) {
+    // Need to recreate table to update CHECK constraint
+    // Temporarily disable foreign keys for the migration
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      CREATE TABLE messages_new (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('system', 'user', 'assistant', 'tool', 'tool_call')),
+        content TEXT NOT NULL,
+        attachments TEXT,
+        tool_call_id TEXT,
+        tool_call_name TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      );
+      INSERT INTO messages_new (id, conversation_id, role, content, attachments, tool_call_id, created_at)
+        SELECT id, conversation_id, role, content, attachments, tool_call_id, created_at FROM messages;
+      DROP TABLE messages;
+      ALTER TABLE messages_new RENAME TO messages;
+      CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at);
+    `);
+    db.pragma('foreign_keys = ON');
+  }
+
+  // Seed default endpoint on first run
+  const endpointCount = (db.prepare('SELECT COUNT(*) as c FROM endpoints').get() as { c: number }).c;
+  if (endpointCount === 0) {
+    const { randomUUID } = require('crypto');
+    db.prepare('INSERT INTO endpoints (id, name, url, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .run(randomUUID(), 'Local Server', 'http://127.0.0.1:8000/v1', Date.now(), Date.now());
   }
 }
 

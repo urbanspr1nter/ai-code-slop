@@ -87,6 +87,15 @@ app.on('window-all-closed', async () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+// ---- Template Variables ----
+function resolveTemplateVars(text: string): string {
+  const now = new Date();
+  return text
+    .replace(/\{\{current_date\}\}/gi, now.toISOString().slice(0, 10))
+    .replace(/\{\{current_time\}\}/gi, now.toLocaleTimeString())
+    .replace(/\{\{current_datetime\}\}/gi, now.toLocaleString());
+}
+
 // ---- IPC Handlers ----
 
 // Endpoints
@@ -120,6 +129,7 @@ ipcMain.handle('conversations:create', (_, title, endpointId, modelId, systemPro
 );
 ipcMain.handle('conversations:update', (_, id, updates) => queries.updateConversation(id, updates));
 ipcMain.handle('conversations:delete', (_, id) => queries.deleteConversation(id));
+ipcMain.handle('conversations:save-stats', (_, id, stats, toolActivity) => queries.saveConversationStats(id, stats, toolActivity));
 
 // Folders
 ipcMain.handle('folders:list', () => queries.listFolders());
@@ -142,8 +152,8 @@ ipcMain.handle('folders:export-file', async (_, folderId) => {
 
 // Messages
 ipcMain.handle('messages:list', (_, conversationId) => queries.listMessages(conversationId));
-ipcMain.handle('messages:create', (_, conversationId, role, content, attachments) =>
-  queries.createMessage(conversationId, role, content, attachments)
+ipcMain.handle('messages:create', (_, conversationId, role, content, attachments, toolCallId, toolCallName) =>
+  queries.createMessage(conversationId, role, content, attachments, toolCallId, toolCallName)
 );
 ipcMain.handle('messages:update', (_, id, content) => queries.updateMessage(id, content));
 ipcMain.handle('messages:delete', (_, id) => queries.deleteMessage(id));
@@ -153,6 +163,7 @@ ipcMain.handle('messages:delete-after', (_, conversationId, afterCreatedAt) =>
 
 // Chat completion (with MCP tool support)
 ipcMain.handle('chat:send', async (_, conversationId: string, channelId: string) => {
+  try {
   if (!mainWindow) throw new Error('No window');
 
   const conv = queries.getConversation(conversationId);
@@ -176,11 +187,19 @@ ipcMain.handle('chat:send', async (_, conversationId: string, channelId: string)
   const toolsPrompt = mcp.buildToolsSystemPrompt();
   const systemParts = [systemPrompt?.content, toolsPrompt].filter(Boolean).join('\n\n');
   if (systemParts) {
-    apiMessages.push({ role: 'system', content: systemParts });
+    apiMessages.push({ role: 'system', content: resolveTemplateVars(systemParts) });
   }
 
   for (const msg of messages) {
-    if (msg.role === 'system') continue;
+    // Skip system messages (handled above) and persisted tool traces (UI-only)
+    if (msg.role === 'system' || msg.role === 'tool_call' || msg.role === 'tool') continue;
+
+    // Strip thinking traces from assistant messages
+    let content: string = msg.content;
+    if (msg.role === 'assistant') {
+      content = content.replace(/^<think>[\s\S]*?<\/think>\s*/i, '');
+    }
+
     if (msg.attachments && msg.attachments.length > 0) {
       const parts: any[] = [];
       for (const att of msg.attachments) {
@@ -188,10 +207,10 @@ ipcMain.handle('chat:send', async (_, conversationId: string, channelId: string)
           parts.push({ type: 'image_url', image_url: { url: `data:${att.mimeType};base64,${att.base64}` } });
         }
       }
-      parts.push({ type: 'text', text: msg.content });
+      parts.push({ type: 'text', text: content });
       apiMessages.push({ role: msg.role, content: parts });
     } else {
-      apiMessages.push({ role: msg.role, content: msg.content });
+      apiMessages.push({ role: msg.role, content });
     }
   }
 
@@ -211,6 +230,12 @@ ipcMain.handle('chat:send', async (_, conversationId: string, channelId: string)
     mainWindow,
     channelId
   );
+  } catch (err: any) {
+    console.error('chat:send error:', err);
+    if (mainWindow) {
+      mainWindow.webContents.send(channelId, { type: 'error', error: err.message });
+    }
+  }
 });
 
 // Get effective system prompt (user prompt + MCP tools)
@@ -222,7 +247,7 @@ ipcMain.handle('chat:system-prompt', (_, conversationId: string) => {
     : undefined;
   const toolsPrompt = mcp.buildToolsSystemPrompt();
   const parts = [systemPrompt?.content, toolsPrompt].filter(Boolean);
-  return parts.length > 0 ? parts.join('\n\n') : null;
+  return parts.length > 0 ? resolveTemplateVars(parts.join('\n\n')) : null;
 });
 
 // Abort stream

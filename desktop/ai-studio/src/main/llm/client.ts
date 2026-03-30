@@ -37,22 +37,22 @@ export async function fetchModels(endpointUrl: string, apiKey?: string): Promise
 }
 
 function buildStats(usage: any, generationStartTime: number, completionTokensFallback: number): StreamStats {
-  const generationTimeMs = Date.now() - generationStartTime;
-  const promptTokens = usage?.prompt_tokens ?? 0;
-  const completionTokens = usage?.completion_tokens ?? completionTokensFallback;
-  const totalTokens = usage?.total_tokens ?? (promptTokens + completionTokens);
+  const generationTimeMs = Math.max(0, Date.now() - generationStartTime);
+  const promptTokens = Math.max(0, usage?.prompt_tokens ?? 0);
+  const completionTokens = Math.max(0, usage?.completion_tokens ?? completionTokensFallback);
+  const totalTokens = Math.max(0, usage?.total_tokens ?? (promptTokens + completionTokens));
   const tokensPerSecond = generationTimeMs > 0 ? (completionTokens / generationTimeMs) * 1000 : 0;
 
   return {
     promptTokens,
     completionTokens,
     totalTokens,
-    tokensPerSecond: Math.round(tokensPerSecond * 100) / 100,
+    tokensPerSecond: Math.round(Math.max(0, tokensPerSecond) * 10) / 10,
     generationTimeMs,
   };
 }
 
-const MAX_TOOL_ROUNDS = 10;
+const MAX_TOOL_ROUNDS = Infinity;
 
 export async function chatCompletion(
   req: ChatRequest,
@@ -70,32 +70,22 @@ export async function chatCompletion(
   let totalTokenCount = 0;
   let lastUsage: any = null;
 
-  // Mutable messages array for tool call loop
   const messages = [...req.messages];
+  const hasTools = req.tools && req.tools.length > 0;
 
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const body: any = {
         model: req.model,
         messages,
-        stream: false,  // Use non-streaming for tool call rounds, stream only final
-        temperature: req.sampling.temperature ?? 0.7,
+        stream: true,
+        temperature: req.sampling.temperature ?? 1.0,
         top_p: req.sampling.topP ?? 0.9,
-        max_tokens: req.sampling.maxTokens ?? 4096,
+        max_tokens: req.sampling.maxTokens ?? 65536,
       };
-
       if (req.sampling.topK !== undefined) body.top_k = req.sampling.topK;
       if (req.sampling.repeatPenalty !== undefined) body.repeat_penalty = req.sampling.repeatPenalty;
-      if (req.tools && req.tools.length > 0) body.tools = req.tools;
-
-      const isLastRound = round === MAX_TOOL_ROUNDS - 1;
-
-      // Stream on the last possible round or when we expect a text response
-      const shouldStream = req.stream && (round > 0 || !req.tools?.length);
-      if (shouldStream || isLastRound) {
-        body.stream = req.stream;
-        if (req.stream) body.stream_options = { include_usage: true };
-      }
+      if (hasTools) body.tools = req.tools;
 
       const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: abortController.signal });
       if (!res.ok) {
@@ -104,73 +94,67 @@ export async function chatCompletion(
         return;
       }
 
-      if (body.stream) {
-        // Stream the final response
-        await streamResponse(res, window, channelId, abortController, generationStartTime, totalTokenCount);
-        return;
-      }
+      // Always stream and emit deltas so user sees progress
+      const emitDeltas = true;
+      const result = await readStream(res, window, channelId, abortController, generationStartTime, totalTokenCount, emitDeltas);
+      if (result.aborted) return;
+      if (result.usage) lastUsage = result.usage;
+      totalTokenCount += result.tokenCount;
 
-      // Non-streaming: check for tool calls
-      const json = await res.json();
-      if (json.usage) lastUsage = json.usage;
+      const resultContent = result.content;
+      const resultToolCalls = result.toolCalls;
 
-      const choice = json.choices?.[0];
-      if (!choice) {
-        window.webContents.send(channelId, { type: 'error', error: 'No response from model' } satisfies StreamChunk);
-        return;
-      }
+      // Filter to only valid tool calls (must have a function name)
+      const validToolCalls = resultToolCalls.filter((tc: any) => tc.function?.name);
 
-      const toolCalls = choice.message?.tool_calls;
-      if (toolCalls && toolCalls.length > 0) {
-        // Add assistant message with tool calls
-        messages.push(choice.message);
+      if (validToolCalls.length > 0) {
+        const cleanedToolCalls = validToolCalls.map((tc: any, i: number) => ({
+          id: tc.id || `call_${Date.now()}_${i}`,
+          type: 'function',
+          function: {
+            name: tc.function.name,
+            arguments: tc.function?.arguments ?? '{}',
+          },
+        }));
 
-        // Execute each tool call
-        for (const tc of toolCalls) {
-          const fnName = tc.function?.name;
+        messages.push({ role: 'assistant', content: resultContent || null, tool_calls: cleanedToolCalls });
+
+        for (const tc of cleanedToolCalls) {
+          const fnName = tc.function.name;
           let fnArgs: any = {};
-          try { fnArgs = JSON.parse(tc.function?.arguments ?? '{}'); } catch {}
+          try { fnArgs = JSON.parse(tc.function.arguments); } catch {}
 
           window.webContents.send(channelId, {
             type: 'tool_call',
-            toolCall: { id: tc.id, name: fnName, arguments: tc.function?.arguments ?? '{}' },
+            toolCall: { id: tc.id, name: fnName, arguments: tc.function.arguments },
           } satisfies StreamChunk);
 
-          let result: string;
+          let toolResult: string;
           try {
-            result = await callTool(fnName, fnArgs);
+            toolResult = await callTool(fnName, fnArgs);
           } catch (err: any) {
-            result = `Error: ${err.message}`;
+            toolResult = `Error: ${err.message}`;
           }
 
           window.webContents.send(channelId, {
             type: 'tool_result',
-            toolResult: { id: tc.id, name: fnName, result },
+            toolResult: { id: tc.id, name: fnName, result: toolResult },
           } satisfies StreamChunk);
 
-          // Add tool result to messages
-          messages.push({
-            role: 'tool',
-            content: result,
-            tool_call_id: tc.id,
-          });
+          messages.push({ role: 'tool', content: toolResult, tool_call_id: tc.id });
         }
 
-        // Continue the loop to get the next response
+        // Continue to next round
         continue;
       }
 
-      // No tool calls — return the text response
-      const content = choice.message?.content ?? '';
-      totalTokenCount += content.split(/\s+/).length;
+      // No tool calls — we're done. Content was already streamed.
       const stats = buildStats(lastUsage, generationStartTime, totalTokenCount);
-      window.webContents.send(channelId, { type: 'delta', content } satisfies StreamChunk);
       window.webContents.send(channelId, { type: 'done', stats } satisfies StreamChunk);
       return;
     }
 
-    // Exceeded max rounds
-    window.webContents.send(channelId, { type: 'error', error: `Tool call loop exceeded ${MAX_TOOL_ROUNDS} rounds` } satisfies StreamChunk);
+    // Should never reach here with infinite loop — only exits via return or error
   } catch (err: any) {
     if (err.name === 'AbortError') {
       const stats = buildStats(lastUsage, generationStartTime, totalTokenCount);
@@ -183,24 +167,35 @@ export async function chatCompletion(
   }
 }
 
-async function streamResponse(
+interface StreamResult {
+  content: string;
+  toolCalls: any[];
+  tokenCount: number;
+  usage: any;
+  aborted: boolean;
+}
+
+async function readStream(
   res: Response,
   window: BrowserWindow,
   channelId: string,
   abortController: AbortController,
   generationStartTime: number,
   existingTokenCount: number,
-): Promise<void> {
+  emitDeltas: boolean,
+): Promise<StreamResult> {
   const reader = res.body?.getReader();
   if (!reader) {
     window.webContents.send(channelId, { type: 'error', error: 'No response body' } satisfies StreamChunk);
-    return;
+    return { content: '', toolCalls: [], tokenCount: 0, usage: null, aborted: false };
   }
 
   const decoder = new TextDecoder();
   let buffer = '';
-  let tokenCount = existingTokenCount;
-  let lastUsage: any = null;
+  let tokenCount = 0;
+  let content = '';
+  let usage: any = null;
+  const toolCalls: Map<number, { id: string; function: { name: string; arguments: string } }> = new Map();
 
   try {
     while (true) {
@@ -216,36 +211,53 @@ async function streamResponse(
         if (!trimmed || !trimmed.startsWith('data: ')) continue;
         const data = trimmed.slice(6);
         if (data === '[DONE]') {
-          const stats = buildStats(lastUsage, generationStartTime, tokenCount);
-          window.webContents.send(channelId, { type: 'done', stats } satisfies StreamChunk);
-          return;
+          return { content, toolCalls: [...toolCalls.values()], tokenCount, usage, aborted: false };
         }
         try {
           const parsed = JSON.parse(data);
-          if (parsed.usage) lastUsage = parsed.usage;
+          if (parsed.usage) usage = parsed.usage;
           if (parsed.timings) {
-            lastUsage = lastUsage ?? {};
-            lastUsage.prompt_tokens = lastUsage.prompt_tokens ?? parsed.timings.prompt_n;
-            lastUsage.completion_tokens = lastUsage.completion_tokens ?? parsed.timings.predicted_n;
+            usage = usage ?? {};
+            usage.prompt_tokens = usage.prompt_tokens ?? parsed.timings.prompt_n;
+            usage.completion_tokens = usage.completion_tokens ?? parsed.timings.predicted_n;
           }
-          const delta = parsed.choices?.[0]?.delta?.content;
+
+          const choice = parsed.choices?.[0];
+          if (!choice) continue;
+
+          // Content delta
+          const delta = choice.delta?.content;
           if (delta) {
+            content += delta;
             tokenCount++;
-            window.webContents.send(channelId, { type: 'delta', content: delta } satisfies StreamChunk);
+            if (emitDeltas) {
+              window.webContents.send(channelId, { type: 'delta', content: delta } satisfies StreamChunk);
+            }
+          }
+
+          // Tool call deltas (streamed incrementally)
+          if (choice.delta?.tool_calls) {
+            for (const tc of choice.delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!toolCalls.has(idx)) {
+                toolCalls.set(idx, { id: tc.id ?? '', function: { name: '', arguments: '' } });
+              }
+              const existing = toolCalls.get(idx)!;
+              if (tc.id) existing.id = tc.id;
+              if (tc.function?.name) existing.function.name += tc.function.name;
+              if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
+            }
           }
         } catch {
-          // skip
+          // Skip malformed JSON lines
         }
       }
     }
-    const stats = buildStats(lastUsage, generationStartTime, tokenCount);
-    window.webContents.send(channelId, { type: 'done', stats } satisfies StreamChunk);
+    return { content, toolCalls: [...toolCalls.values()], tokenCount, usage, aborted: false };
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      const stats = buildStats(lastUsage, generationStartTime, tokenCount);
-      window.webContents.send(channelId, { type: 'done', stats } satisfies StreamChunk);
-    } else {
-      window.webContents.send(channelId, { type: 'error', error: err.message } satisfies StreamChunk);
+      return { content, toolCalls: [], tokenCount, usage, aborted: true };
     }
+    throw err;
   }
 }

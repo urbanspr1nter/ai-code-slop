@@ -32,6 +32,8 @@ export interface Conversation {
   systemPromptId?: string;
   samplingPresetId?: string;
   folderId?: string;
+  lastStats?: StreamStats;
+  lastToolActivity?: { name: string; status: string; arguments?: string; result?: string }[];
   createdAt: number;
   updatedAt: number;
 }
@@ -48,7 +50,7 @@ export interface ExportedConversation {
 }
 
 // ---- Messages ----
-export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
+export type MessageRole = 'system' | 'user' | 'assistant' | 'tool' | 'tool_call';
 
 export interface MessageAttachment {
   type: 'image';
@@ -63,6 +65,7 @@ export interface Message {
   content: string;
   attachments?: MessageAttachment[];
   toolCallId?: string;
+  toolCallName?: string;
   createdAt: number;
 }
 

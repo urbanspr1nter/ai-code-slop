@@ -30,9 +30,10 @@ declare global {
       createConversation(title: string, endpointId: string, modelId: string, systemPromptId?: string, samplingPresetId?: string, folderId?: string): Promise<Conversation>;
       updateConversation(id: string, updates: any): Promise<void>;
       deleteConversation(id: string): Promise<void>;
+      saveConversationStats(id: string, stats: any, toolActivity?: any): Promise<void>;
 
       listMessages(conversationId: string): Promise<Message[]>;
-      createMessage(conversationId: string, role: string, content: string, attachments?: string): Promise<Message>;
+      createMessage(conversationId: string, role: string, content: string, attachments?: string, toolCallId?: string, toolCallName?: string): Promise<Message>;
       updateMessage(id: string, content: string): Promise<void>;
       deleteMessage(id: string): Promise<void>;
       deleteMessagesAfter(conversationId: string, afterCreatedAt: number): Promise<void>;

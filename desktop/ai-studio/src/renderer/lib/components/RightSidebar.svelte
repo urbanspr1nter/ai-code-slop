@@ -18,10 +18,10 @@
   // Local state for editing
   let promptContent = $state('');
   let promptName = $state('');
-  let temp = $state(0.7);
+  let temp = $state(1.0);
   let topP = $state(0.9);
-  let topK = $state(40);
-  let maxTokens = $state(4096);
+  let topK = $state(20);
+  let maxTokens = $state(65536);
   let repeatPenalty = $state(1.1);
 
   let promptSection = $state(true);
@@ -45,10 +45,10 @@
       maxTokens = activePreset.maxTokens;
       repeatPenalty = activePreset.repeatPenalty;
     } else {
-      temp = 0.7;
+      temp = 1.0;
       topP = 0.9;
-      topK = 40;
-      maxTokens = 4096;
+      topK = 20;
+      maxTokens = 65536;
       repeatPenalty = 1.1;
     }
   });

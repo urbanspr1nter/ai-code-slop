@@ -34,11 +34,12 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('conversations:create', title, endpointId, modelId, systemPromptId, samplingPresetId, folderId),
   updateConversation: (id: string, updates: any) => ipcRenderer.invoke('conversations:update', id, updates),
   deleteConversation: (id: string) => ipcRenderer.invoke('conversations:delete', id),
+  saveConversationStats: (id: string, stats: any, toolActivity?: any) => ipcRenderer.invoke('conversations:save-stats', id, stats, toolActivity),
 
   // Messages
   listMessages: (conversationId: string) => ipcRenderer.invoke('messages:list', conversationId),
-  createMessage: (conversationId: string, role: string, content: string, attachments?: string) =>
-    ipcRenderer.invoke('messages:create', conversationId, role, content, attachments),
+  createMessage: (conversationId: string, role: string, content: string, attachments?: string, toolCallId?: string, toolCallName?: string) =>
+    ipcRenderer.invoke('messages:create', conversationId, role, content, attachments, toolCallId, toolCallName),
   updateMessage: (id: string, content: string) => ipcRenderer.invoke('messages:update', id, content),
   deleteMessage: (id: string) => ipcRenderer.invoke('messages:delete', id),
   deleteMessagesAfter: (conversationId: string, afterCreatedAt: number) =>

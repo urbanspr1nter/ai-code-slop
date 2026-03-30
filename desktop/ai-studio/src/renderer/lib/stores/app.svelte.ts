@@ -20,6 +20,7 @@ export const appState = $state({
   settingsOpen: false,
   rightSidebarOpen: false,
   lastStats: null as StreamStats | null,
+  lastStatsConversationId: null as string | null,
   promptProcessing: false,
   promptProcessingStartTime: 0,
   systemPromptVersion: 0,

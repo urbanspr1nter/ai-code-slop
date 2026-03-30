@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { appState, loadEndpoints, loadSystemPrompts, loadSamplingPresets, loadDefaults, showToast } from '../stores/app.svelte';
+  import { appState, loadEndpoints, loadSystemPrompts, loadSamplingPresets, loadDefaults, loadConversations, showToast } from '../stores/app.svelte';
 
-  let activeTab = $state<'endpoints' | 'prompts' | 'sampling' | 'defaults'>('endpoints');
+  let activeTab = $state<'endpoints' | 'prompts' | 'sampling' | 'defaults' | 'help'>('endpoints');
 
   // Defaults state
   let defaultEndpointId = $state(appState.defaults.endpointId ?? '');
@@ -31,15 +31,21 @@
 
   // Sampling preset form
   let sampName = $state('');
-  let sampTemp = $state(0.7);
+  let sampTemp = $state(1.0);
   let sampTopP = $state(0.9);
-  let sampTopK = $state(40);
-  let sampMaxTokens = $state(4096);
+  let sampTopK = $state(20);
+  let sampMaxTokens = $state(65536);
   let sampRepeatPenalty = $state(1.1);
   let editingPresetId = $state<string | null>(null);
 
   function close() {
     appState.settingsOpen = false;
+    // Refresh all data so toolbar/sidebars reflect any changes
+    loadEndpoints();
+    loadSystemPrompts();
+    loadSamplingPresets();
+    loadConversations();
+    loadDefaults();
   }
 
   async function saveEndpoint() {
@@ -145,10 +151,10 @@
   function resetPresetForm() {
     editingPresetId = null;
     sampName = '';
-    sampTemp = 0.7;
+    sampTemp = 1.0;
     sampTopP = 0.9;
-    sampTopK = 40;
-    sampMaxTokens = 4096;
+    sampTopK = 20;
+    sampMaxTokens = 65536;
     sampRepeatPenalty = 1.1;
   }
 </script>
@@ -165,7 +171,7 @@
 
     <!-- Tabs -->
     <div class="flex border-b border-border px-6 gap-1">
-      {#each [['defaults', 'Defaults'], ['endpoints', 'Endpoints'], ['prompts', 'System Prompts'], ['sampling', 'Sampling']] as [key, label]}
+      {#each [['defaults', 'Defaults'], ['endpoints', 'Endpoints'], ['prompts', 'System Prompts'], ['sampling', 'Sampling'], ['help', 'Help']] as [key, label]}
         <button
           onclick={() => activeTab = key as any}
           class="px-4 py-3 text-sm font-medium transition-colors cursor-pointer {activeTab === key ? 'text-accent border-b-2 border-accent' : 'text-text-muted hover:text-text-primary'}"
@@ -211,7 +217,7 @@
               bind:value={defaultSamplingPresetId}
               class="w-full bg-bg-input border border-border rounded-lg px-4 py-2.5 text-sm text-text-primary cursor-pointer"
             >
-              <option value="">Default (temp=0.7, top_p=0.9)</option>
+              <option value="">Default (temp=1.0, top_p=0.9, top_k=20)</option>
               {#each appState.samplingPresets as p (p.id)}
                 <option value={p.id}>{p.name}</option>
               {/each}
@@ -330,6 +336,96 @@
               </div>
             </div>
           {/each}
+        </div>
+      {:else if activeTab === 'help'}
+        <div class="space-y-6 text-sm text-text-secondary leading-relaxed">
+          <div>
+            <h3 class="text-base font-semibold text-text-primary mb-2">Getting Started</h3>
+            <p>AI Studio connects to remote OpenAI-compatible LLM servers. It does not run models locally. To start chatting:</p>
+            <ol class="list-decimal pl-5 mt-2 space-y-1">
+              <li>Add an <strong>Endpoint</strong> (e.g. <code class="bg-bg-tertiary px-1.5 py-0.5 rounded text-xs">http://127.0.0.1:8000/v1</code>)</li>
+              <li>Click <strong>+ New Chat</strong> to create a conversation</li>
+              <li>Select a model from the toolbar dropdown</li>
+              <li>Type a message and press <strong>Ctrl+Enter</strong> to send</li>
+            </ol>
+          </div>
+
+          <div>
+            <h3 class="text-base font-semibold text-text-primary mb-2">Keyboard Shortcuts</h3>
+            <div class="grid grid-cols-2 gap-2">
+              <div><code class="bg-bg-tertiary px-1.5 py-0.5 rounded text-xs">Ctrl+Enter</code></div><div>Send message</div>
+              <div><code class="bg-bg-tertiary px-1.5 py-0.5 rounded text-xs">Escape</code></div><div>Cancel editing</div>
+              <div><code class="bg-bg-tertiary px-1.5 py-0.5 rounded text-xs">Ctrl+Enter</code></div><div>Save & regenerate (while editing)</div>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="text-base font-semibold text-text-primary mb-2">Template Variables</h3>
+            <p>Use these in system prompts. They resolve fresh on every request:</p>
+            <div class="mt-2 space-y-2">
+              <div class="flex items-start gap-3">
+                <code class="bg-bg-tertiary px-1.5 py-0.5 rounded text-xs whitespace-nowrap">{'{{current_date}}'}</code>
+                <span>Today's date in ISO format (e.g. <code class="text-xs">2026-03-30</code>)</span>
+              </div>
+              <div class="flex items-start gap-3">
+                <code class="bg-bg-tertiary px-1.5 py-0.5 rounded text-xs whitespace-nowrap">{'{{current_time}}'}</code>
+                <span>Current local time (e.g. <code class="text-xs">3:45:12 PM</code>)</span>
+              </div>
+              <div class="flex items-start gap-3">
+                <code class="bg-bg-tertiary px-1.5 py-0.5 rounded text-xs whitespace-nowrap">{'{{current_datetime}}'}</code>
+                <span>Full date and time in local format</span>
+              </div>
+            </div>
+            <p class="mt-2 text-text-muted">Example: <code class="bg-bg-tertiary px-1.5 py-0.5 rounded text-xs">You are a helpful assistant. Today is {'{{current_date}}'}.</code></p>
+          </div>
+
+          <div>
+            <h3 class="text-base font-semibold text-text-primary mb-2">Sampling Parameters</h3>
+            <div class="space-y-2">
+              <div><strong>Temperature</strong> — Controls randomness. 0 = deterministic, 2 = very creative. Default: 1.0</div>
+              <div><strong>Top P</strong> — Nucleus sampling. Only consider tokens in the top P probability mass. Default: 0.9</div>
+              <div><strong>Top K</strong> — Only consider the K most likely tokens. Lower = more focused. Default: 20</div>
+              <div><strong>Max Tokens</strong> — Maximum response length in tokens. Default: 65536</div>
+              <div><strong>Repeat Penalty</strong> — Penalizes repeated tokens. 1.0 = off, higher = less repetition. Default: 1.1</div>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="text-base font-semibold text-text-primary mb-2">MCP Tools</h3>
+            <p>Connect MCP (Model Context Protocol) servers to give models access to external tools like web search, file access, APIs, etc.</p>
+            <p class="mt-2">Configure via the <strong>Configuration panel</strong> (gear icon) &gt; <strong>MCP Tools</strong> &gt; <strong>Edit mcp.json</strong>. Format:</p>
+            <pre class="bg-bg-tertiary rounded-lg p-3 mt-2 text-xs overflow-x-auto">{'{\n  "mcpServers": {\n    "my-server": {\n      "command": "npx",\n      "args": ["-y", "some-mcp-package"],\n      "env": { "API_KEY": "..." }\n    }\n  }\n}'}</pre>
+            <p class="mt-2">Tool calls and results appear as colored cards in the chat — blue for calls, green for results. They persist across restarts.</p>
+          </div>
+
+          <div>
+            <h3 class="text-base font-semibold text-text-primary mb-2">Folders & Export</h3>
+            <p>Organize conversations into folders. Export a folder's conversations as JSON in OpenAI API format (with vision support) for synthetic data generation.</p>
+            <p class="mt-2">Other export options in the sidebar:</p>
+            <ul class="list-disc pl-5 mt-1 space-y-1">
+              <li><strong>Export DB</strong> — Save the SQLite database</li>
+              <li><strong>Import DB</strong> — Load a database backup</li>
+              <li><strong>Download All Data (.zip)</strong> — Full backup including DB, MCP config, and settings</li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="text-base font-semibold text-text-primary mb-2">Features</h3>
+            <ul class="list-disc pl-5 space-y-1">
+              <li>Streaming responses with live token/s stats</li>
+              <li>Image attachments via paste, drag & drop, or file picker (vision)</li>
+              <li>Thinking trace support (<code class="bg-bg-tertiary px-1.5 py-0.5 rounded text-xs">{'<think>'}</code> tags from DeepSeek, QwQ, etc.)</li>
+              <li>Edit messages and regenerate from any point</li>
+              <li>Multiple endpoints — switch between providers per conversation</li>
+              <li>System prompt and sampling presets — save and reuse</li>
+              <li>Background generation — switch chats while responses stream</li>
+              <li>Performance stats: tok/s, TTFT, context estimate</li>
+            </ul>
+          </div>
+
+          <div class="text-text-muted text-xs pt-2 border-t border-border">
+            AI Studio v0.1.0 — Cross-platform LLM chat client
+          </div>
         </div>
       {/if}
     </div>

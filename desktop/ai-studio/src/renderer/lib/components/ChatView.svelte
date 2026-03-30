@@ -13,11 +13,10 @@
   let showScrollIndicator = $derived(isStreamingHere && !userAtBottom);
   let pendingImages = $state<MessageAttachment[]>([]);
   let draggingOver = $state(false);
-  let toolActivity = $state<{ name: string; status: 'calling' | 'done'; arguments?: string; result?: string }[]>([]);
+  let toolActivity = $state<{ name: string; status: 'calling' | 'done' }[]>([]);
   let effectiveSystemPrompt = $state<string | null>(null);
   let systemPromptOpen = $state(false);
   let thinkingOpen = $state(false);
-  let toolCardsOpen = $state<Record<number, boolean>>({});
 
   const activeConv = $derived(
     appState.conversations.find((c) => c.id === appState.activeConversationId)
@@ -43,10 +42,8 @@
 
   // Parse thinking traces from streaming content
   // Models may wrap thinking in <think>...</think> tags
-  const parsedStreaming = $derived(() => {
-    const raw = appState.streamingContent;
+  function parseThinking(raw: string): { thinking: string; content: string } {
     if (!raw) return { thinking: '', content: '' };
-
     const thinkMatch = raw.match(/^<think>([\s\S]*?)(<\/think>)?([\s\S]*)$/);
     if (thinkMatch) {
       const thinking = thinkMatch[1] ?? '';
@@ -55,16 +52,46 @@
       return { thinking: thinking.trim(), content: content.trim() };
     }
     return { thinking: '', content: raw };
-  });
+  }
 
-  const streamingThinking = $derived(parsedStreaming().thinking);
-  const streamingContent = $derived(parsedStreaming().content);
+  const parsedStreaming = $derived(parseThinking(appState.streamingContent));
+  const streamingThinking = $derived(parsedStreaming.thinking);
+  const streamingContent = $derived(parsedStreaming.content);
   const streamingHtmlContent = $derived(streamingContent ? renderMarkdown(streamingContent) : '');
 
-  // Focus textarea when switching conversations
+  // Rough token estimate: ~4 chars per token (GPT-style approximation)
+  function estimateTokens(text: string): number {
+    return Math.ceil(text.length / 4);
+  }
+
+  // Estimate total context used by current conversation
+  function calcContext(): number {
+    let total = 0;
+    if (effectiveSystemPrompt) total += estimateTokens(effectiveSystemPrompt);
+    for (const msg of appState.messages) {
+      total += estimateTokens(msg.content || '');
+    }
+    if (appState.streamingContent) total += estimateTokens(appState.streamingContent);
+    return Math.max(0, total);
+  }
+  const estimatedContext = $derived(calcContext());
+
+  // Show stats only for the active conversation
+  const showStats = $derived(
+    appState.lastStats && appState.lastStatsConversationId === appState.activeConversationId
+  );
+
+  // Restore stats + focus textarea when switching conversations
   $effect(() => {
-    if (appState.activeConversationId && textareaEl) {
-      requestAnimationFrame(() => textareaEl?.focus());
+    if (appState.activeConversationId) {
+      // Restore persisted stats + tool activity for this conversation
+      const conv = appState.conversations.find((c) => c.id === appState.activeConversationId);
+      if (conv && appState.lastStatsConversationId !== appState.activeConversationId) {
+        appState.lastStats = conv.lastStats ?? null;
+        appState.lastStatsConversationId = appState.activeConversationId;
+        toolActivity = [];
+      }
+      if (textareaEl) requestAnimationFrame(() => textareaEl?.focus());
     }
   });
 
@@ -135,11 +162,11 @@
     const streamStartTime = Date.now();
 
     appState.lastStats = { promptTokens: 0, completionTokens: 0, totalTokens: 0, tokensPerSecond: 0, generationTimeMs: 0 };
+    appState.lastStatsConversationId = streamConvId;
     appState.promptProcessing = true;
     appState.promptProcessingStartTime = streamStartTime;
     toolActivity = [];
     thinkingOpen = false;
-    toolCardsOpen = {};
 
     const cleanup = (content: string) => {
       if (finished) return;
@@ -160,23 +187,25 @@
           appState.promptProcessing = false;
         }
         const elapsed = Date.now() - firstTokenTime;
+        const tps = elapsed > 0 ? (tokenCount / elapsed) * 1000 : 0;
         appState.lastStats = {
           promptTokens: 0,
           completionTokens: tokenCount,
           totalTokens: tokenCount,
-          tokensPerSecond: elapsed > 0 ? Math.round((tokenCount / elapsed) * 10000) / 10 : 0,
-          generationTimeMs: Date.now() - streamStartTime,
+          tokensPerSecond: Math.round(tps * 10) / 10,
+          generationTimeMs: Math.max(0, Date.now() - streamStartTime),
         };
       } else if (chunk.type === 'done') {
-        const ttftMs = firstTokenTime ? firstTokenTime - streamStartTime : Date.now() - streamStartTime;
+        const ttftMs = Math.max(0, firstTokenTime ? firstTokenTime - streamStartTime : Date.now() - streamStartTime);
         if (chunk.stats) {
-          const elapsed = firstTokenTime ? Date.now() - firstTokenTime : 1;
+          const elapsed = Math.max(1, firstTokenTime ? Date.now() - firstTokenTime : 1);
           const completionTokens = chunk.stats.completionTokens || tokenCount;
+          const tps = (completionTokens / elapsed) * 1000;
           appState.lastStats = {
             ...chunk.stats,
             completionTokens,
-            tokensPerSecond: elapsed > 0 ? Math.round((completionTokens / elapsed) * 10000) / 10 : 0,
-            generationTimeMs: Date.now() - streamStartTime,
+            tokensPerSecond: Math.round(tps * 10) / 10,
+            generationTimeMs: Math.max(0, Date.now() - streamStartTime),
             ttftMs,
           };
         } else {
@@ -184,13 +213,25 @@
         }
         cleanup(fullContent);
       } else if (chunk.type === 'tool_call' && chunk.toolCall) {
-        toolActivity = [...toolActivity, { name: chunk.toolCall.name, status: 'calling', arguments: chunk.toolCall.arguments }];
+        toolActivity = [...toolActivity, { name: chunk.toolCall.name, status: 'calling' }];
+        // Save tool call as a message and refresh
+        if (streamConvId) {
+          window.api.createMessage(streamConvId, 'tool_call', chunk.toolCall.arguments || '{}', undefined, chunk.toolCall.id, chunk.toolCall.name).then(() => {
+            if (appState.activeConversationId === streamConvId) loadMessages(streamConvId);
+          });
+        }
       } else if (chunk.type === 'tool_result' && chunk.toolResult) {
         toolActivity = toolActivity.map((t) =>
           t.name === chunk.toolResult!.name && t.status === 'calling'
             ? { ...t, status: 'done' as const, result: chunk.toolResult!.result }
             : t
         );
+        // Save tool result as a message and refresh
+        if (streamConvId) {
+          window.api.createMessage(streamConvId, 'tool', chunk.toolResult.result, undefined, chunk.toolResult.id, chunk.toolResult.name).then(() => {
+            if (appState.activeConversationId === streamConvId) loadMessages(streamConvId);
+          });
+        }
       } else if (chunk.type === 'error') {
         cleanup(`Error: ${chunk.error}`);
       }
@@ -207,10 +248,13 @@
     try {
       if (conversationId && content) {
         await window.api.createMessage(conversationId, 'assistant', content);
-        // Only refresh messages if we're still viewing that conversation
         if (appState.activeConversationId === conversationId) {
           await loadMessages(conversationId);
         }
+      }
+      // Persist stats + tool activity to DB
+      if (conversationId && appState.lastStats) {
+        await window.api.saveConversationStats(conversationId, appState.lastStats);
       }
     } finally {
       appState.isStreaming = false;
@@ -220,7 +264,7 @@
   }
 
   async function handleEdit(messageId: string, newContent: string) {
-    if (!appState.activeConversationId) return;
+    if (!appState.activeConversationId || isStreamingHere) return;
     const msg = appState.messages.find((m) => m.id === messageId);
     if (!msg) return;
     await window.api.updateMessage(messageId, newContent);
@@ -230,7 +274,7 @@
   }
 
   async function handleRegenerate() {
-    if (!appState.activeConversationId) return;
+    if (!appState.activeConversationId || isStreamingHere) return;
     const lastMsg = appState.messages[appState.messages.length - 1];
     if (lastMsg?.role === 'assistant') {
       await window.api.deleteMessage(lastMsg.id);
@@ -351,6 +395,7 @@
     const val = (e.target as HTMLSelectElement).value;
     await window.api.updateConversation(activeConv.id, { systemPromptId: val || undefined });
     await loadConversations();
+    appState.systemPromptVersion++;
   }
 
   async function updateSamplingPreset(e: Event) {
@@ -490,7 +535,7 @@
         {/if}
 
         {#each appState.messages as msg, i (msg.id)}
-          <ChatMessage
+            <ChatMessage
             message={msg}
             isLast={i === appState.messages.length - 1}
             isStreaming={isStreamingHere}
@@ -523,51 +568,7 @@
           </div>
         {/if}
 
-        <!-- Tool call cards (only during streaming) -->
-        {#if toolActivity.length > 0 && isStreamingHere}
-          <div class="mb-4 space-y-2">
-            {#each toolActivity as tool, idx}
-              <div class="border rounded-xl overflow-hidden {tool.status === 'calling' ? 'border-blue-200 bg-blue-50' : 'border-emerald-200 bg-emerald-50'}">
-                <button
-                  onclick={() => toolCardsOpen = { ...toolCardsOpen, [idx]: !toolCardsOpen[idx] }}
-                  class="w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer transition-colors {tool.status === 'calling' ? 'hover:bg-blue-100' : 'hover:bg-emerald-100'}"
-                >
-                  {#if tool.status === 'calling'}
-                    <span class="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-200 px-2 py-0.5 rounded flex items-center gap-1.5">
-                      <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-                      Tool Call
-                    </span>
-                  {:else}
-                    <span class="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-200 px-2 py-0.5 rounded flex items-center gap-1.5">
-                      <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                      Tool Done
-                    </span>
-                  {/if}
-                  <span class="text-sm font-mono font-medium {tool.status === 'calling' ? 'text-blue-900' : 'text-emerald-900'}">{tool.name}</span>
-                  <span class="{tool.status === 'calling' ? 'text-blue-600' : 'text-emerald-600'} text-xs ml-auto flex-shrink-0">{toolCardsOpen[idx] ? '▾' : '▸'}</span>
-                </button>
-                {#if toolCardsOpen[idx]}
-                  <div class="px-4 pb-4 border-t {tool.status === 'calling' ? 'border-blue-200' : 'border-emerald-200'} space-y-3">
-                    {#if tool.arguments}
-                      <div class="mt-3">
-                        <div class="text-xs font-medium uppercase tracking-wider {tool.status === 'calling' ? 'text-blue-600' : 'text-emerald-600'} mb-1">Arguments</div>
-                        <pre class="text-sm bg-white/60 rounded-lg p-3 overflow-x-auto font-mono {tool.status === 'calling' ? 'text-blue-900/80' : 'text-emerald-900/80'}">{(() => { try { return JSON.stringify(JSON.parse(tool.arguments!), null, 2); } catch { return tool.arguments; } })()}</pre>
-                      </div>
-                    {/if}
-                    {#if tool.result}
-                      <div>
-                        <div class="text-xs font-medium uppercase tracking-wider text-emerald-600 mb-1">Result</div>
-                        <pre class="text-sm bg-white/60 rounded-lg p-3 overflow-x-auto max-h-[200px] overflow-y-auto text-emerald-900/80 whitespace-pre-wrap">{tool.result}</pre>
-                      </div>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
-            {/each}
-          </div>
-        {/if}
-
-        <!-- Streaming message (after thinking/tools) -->
+        <!-- Streaming message -->
         {#if isStreamingHere && streamingContent}
           <div class="flex justify-start mb-5">
             <div class="max-w-[80%] bg-assistant-bubble rounded-2xl rounded-bl-sm px-5 py-4">
@@ -689,12 +690,18 @@
 
           <!-- Right: stats + send/stop -->
           <div class="flex items-center gap-4">
-            <!-- Perf stats -->
-            {#if appState.lastStats}
+            <!-- Context estimate (always visible for active chat) -->
+            {#if estimatedContext > 0}
+              <div class="flex gap-3 text-xs text-text-muted">
+                <span title="Estimated tokens in context (messages + system prompt + streaming)">{estimatedContext.toLocaleString()} ctx</span>
+              </div>
+            {/if}
+
+            <!-- Perf stats (only for this conversation's last generation) -->
+            {#if showStats && appState.lastStats}
               <div class="flex gap-3 text-xs text-text-muted">
                 <span>{appState.lastStats.tokensPerSecond} tok/s</span>
                 <span>{appState.lastStats.completionTokens} gen</span>
-                <span>{appState.lastStats.promptTokens} prompt</span>
                 {#if appState.lastStats.ttftMs !== undefined}
                   <span>TTFT {appState.lastStats.ttftMs < 1000 ? `${appState.lastStats.ttftMs}ms` : `${(appState.lastStats.ttftMs / 1000).toFixed(1)}s`}</span>
                 {/if}
