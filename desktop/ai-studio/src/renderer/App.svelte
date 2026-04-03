@@ -5,6 +5,7 @@
   import ChatView from './lib/components/ChatView.svelte';
   import Settings from './lib/components/Settings.svelte';
   import RightSidebar from './lib/components/RightSidebar.svelte';
+  import McpEditor from './lib/components/McpEditor.svelte';
   import Toast from './lib/components/Toast.svelte';
   import { onMount } from 'svelte';
 
@@ -23,7 +24,11 @@
 
   <!-- Main content -->
   <div class="flex-1 min-w-0">
-    <ChatView />
+    {#if appState.mcpEditorOpen}
+      <McpEditor />
+    {:else}
+      <ChatView />
+    {/if}
   </div>
 
   <!-- Right Sidebar -->

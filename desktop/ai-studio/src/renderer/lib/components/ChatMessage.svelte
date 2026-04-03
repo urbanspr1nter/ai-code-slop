@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Message } from '../../../shared/types';
   import { renderMarkdown } from '../markdown';
+  import { parseThinking } from '../thinking';
 
   interface Props {
     message: Message;
@@ -44,25 +45,18 @@
   }
 
   // Parse thinking traces from saved assistant messages
-  function parseThinking(raw: string): { thinking: string; content: string } {
-    const thinkMatch = raw.match(/^<think>([\s\S]*?)<\/think>\s*([\s\S]*)$/);
-    if (thinkMatch) {
-      return { thinking: thinkMatch[1].trim(), content: thinkMatch[2].trim() };
-    }
-    return { thinking: '', content: raw };
-  }
-
-  const thinkingContent = $derived(message.role === 'assistant' ? parseThinking(message.content).thinking : '');
-  const displayContent = $derived(message.role === 'assistant' ? parseThinking(message.content).content : message.content);
+  const parsed = $derived(message.role === 'assistant' ? parseThinking(message.content) : { thinking: '', content: message.content });
+  const thinkingContent = $derived(parsed.thinking);
+  const displayContent = $derived(parsed.content);
   const renderedContent = $derived(
     message.role === 'assistant' ? renderMarkdown(displayContent) : ''
   );
 
   // Pretty-print tool call arguments
-  const prettyArgs = $derived(() => {
+  function prettyArgs(): string {
     if (!isToolCall) return '';
     try { return JSON.stringify(JSON.parse(message.content), null, 2); } catch { return message.content; }
-  });
+  }
 </script>
 
 <!-- Tool call message -->

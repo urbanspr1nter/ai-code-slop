@@ -26,7 +26,10 @@
     const defaults = appState.defaults;
     const endpoint = appState.endpoints.find((e) => e.id === defaults.endpointId) ?? appState.endpoints[0];
     await loadModels(endpoint.id);
-    const modelId = appState.models[0]?.id ?? 'default';
+    const defaultModel = defaults.modelId && appState.models.some((m) => m.id === defaults.modelId)
+      ? defaults.modelId
+      : appState.models[0]?.id ?? 'default';
+    const modelId = defaultModel;
 
     const conv = await window.api.createConversation(
       'New Chat',

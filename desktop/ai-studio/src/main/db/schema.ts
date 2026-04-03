@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
+import { randomUUID } from 'crypto';
 import path from 'path';
 import { app } from 'electron';
 
-let db: Database.Database;
+let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (!db) {
@@ -129,10 +130,13 @@ function initSchema(db: Database.Database) {
   // Seed default endpoint on first run
   const endpointCount = (db.prepare('SELECT COUNT(*) as c FROM endpoints').get() as { c: number }).c;
   if (endpointCount === 0) {
-    const { randomUUID } = require('crypto');
     db.prepare('INSERT INTO endpoints (id, name, url, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
       .run(randomUUID(), 'Local Server', 'http://127.0.0.1:8000/v1', Date.now(), Date.now());
   }
+}
+
+export function resetDb() {
+  db = null;
 }
 
 export function closeDb() {

@@ -12,6 +12,7 @@ let mainWindow: BrowserWindow | null = null;
 // ---- Defaults ----
 interface AppDefaults {
   endpointId?: string;
+  modelId?: string;
   systemPromptId?: string;
   samplingPresetId?: string;
 }
@@ -129,7 +130,7 @@ ipcMain.handle('conversations:create', (_, title, endpointId, modelId, systemPro
 );
 ipcMain.handle('conversations:update', (_, id, updates) => queries.updateConversation(id, updates));
 ipcMain.handle('conversations:delete', (_, id) => queries.deleteConversation(id));
-ipcMain.handle('conversations:save-stats', (_, id, stats, toolActivity) => queries.saveConversationStats(id, stats, toolActivity));
+ipcMain.handle('conversations:save-stats', (_, id, stats) => queries.saveConversationStats(id, stats));
 
 // Folders
 ipcMain.handle('folders:list', () => queries.listFolders());
@@ -162,7 +163,9 @@ ipcMain.handle('messages:delete-after', (_, conversationId, afterCreatedAt) =>
 );
 
 // Chat completion (with MCP tool support)
-ipcMain.handle('chat:send', async (_, conversationId: string, channelId: string) => {
+ipcMain.handle('chat:send', async (_, conversationId: string, channelId: string, options?: { agentAddendum?: string; continuePrompt?: string }) => {
+  const agentAddendum = options?.agentAddendum;
+  const continuePrompt = options?.continuePrompt;
   try {
   if (!mainWindow) throw new Error('No window');
 
@@ -181,41 +184,79 @@ ipcMain.handle('chat:send', async (_, conversationId: string, channelId: string)
     ? queries.listSamplingPresets().find((p) => p.id === conv.samplingPresetId)
     : undefined;
 
-  const apiMessages: { role: string; content: string | any[] }[] = [];
+  const apiMessages: any[] = [];
 
-  // Build system prompt: user's system prompt + MCP tool descriptions
-  const toolsPrompt = mcp.buildToolsSystemPrompt();
-  const systemParts = [systemPrompt?.content, toolsPrompt].filter(Boolean).join('\n\n');
+  // Build system prompt: user's system prompt + agent addendum
+  // Tool descriptions are passed via the `tools` parameter, not duplicated in the system prompt
+  const tools = mcp.toolsToOpenAIFormat();
+  const systemParts = [systemPrompt?.content, agentAddendum].filter(Boolean).join('\n\n');
   if (systemParts) {
     apiMessages.push({ role: 'system', content: resolveTemplateVars(systemParts) });
   }
 
-  for (const msg of messages) {
-    // Skip system messages (handled above) and persisted tool traces (UI-only)
-    if (msg.role === 'system' || msg.role === 'tool_call' || msg.role === 'tool') continue;
+  // Build message history, reconstructing tool call sequences for the API
+  let pendingToolCalls: any[] = [];
+  let pendingAssistantContent: string | null = null;
 
-    // Strip thinking traces from assistant messages
-    let content: string = msg.content;
-    if (msg.role === 'assistant') {
-      content = content.replace(/^<think>[\s\S]*?<\/think>\s*/i, '');
-    }
-
-    if (msg.attachments && msg.attachments.length > 0) {
-      const parts: any[] = [];
-      for (const att of msg.attachments) {
-        if (att.type === 'image') {
-          parts.push({ type: 'image_url', image_url: { url: `data:${att.mimeType};base64,${att.base64}` } });
-        }
-      }
-      parts.push({ type: 'text', text: content });
-      apiMessages.push({ role: msg.role, content: parts });
-    } else {
-      apiMessages.push({ role: msg.role, content });
+  function flushPendingToolCalls() {
+    if (pendingToolCalls.length > 0) {
+      apiMessages.push({ role: 'assistant', content: pendingAssistantContent || null, tool_calls: pendingToolCalls });
+      pendingAssistantContent = null;
+      pendingToolCalls = [];
     }
   }
 
-  // Get OpenAI-format tools if any MCP servers are connected
-  const tools = mcp.toolsToOpenAIFormat();
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg.role === 'system') continue;
+
+    if (msg.role === 'tool_call') {
+      pendingToolCalls.push({
+        id: msg.toolCallId || `call_${i}`,
+        type: 'function',
+        function: { name: msg.toolCallName || 'unknown', arguments: msg.content },
+      });
+      continue;
+    }
+
+    if (msg.role === 'tool') {
+      flushPendingToolCalls();
+      apiMessages.push({ role: 'tool', content: msg.content, tool_call_id: msg.toolCallId || '' });
+      continue;
+    }
+
+    flushPendingToolCalls();
+
+    if (msg.role === 'assistant') {
+      let content = msg.content.replace(/^<think>[\s\S]*?<\/think>\s*/i, '');
+      // If next message is a tool_call, hold this content to attach to the tool call assistant message
+      if (messages[i + 1]?.role === 'tool_call') {
+        pendingAssistantContent = content || null;
+        continue;
+      }
+      apiMessages.push({ role: 'assistant', content });
+    } else if (msg.role === 'user') {
+      if (msg.attachments && msg.attachments.length > 0) {
+        const parts: any[] = [];
+        for (const att of msg.attachments) {
+          if (att.type === 'image') {
+            parts.push({ type: 'image_url', image_url: { url: `data:${att.mimeType};base64,${att.base64}` } });
+          }
+        }
+        parts.push({ type: 'text', text: msg.content });
+        apiMessages.push({ role: 'user', content: parts });
+      } else {
+        apiMessages.push({ role: 'user', content: msg.content });
+      }
+    }
+  }
+
+  flushPendingToolCalls();
+
+  // Agent continue prompt — appended to API messages but NOT saved to DB
+  if (continuePrompt) {
+    apiMessages.push({ role: 'user', content: continuePrompt });
+  }
 
   await chatCompletion(
     {
@@ -245,8 +286,7 @@ ipcMain.handle('chat:system-prompt', (_, conversationId: string) => {
   const systemPrompt = conv.systemPromptId
     ? queries.listSystemPrompts().find((s) => s.id === conv.systemPromptId)
     : undefined;
-  const toolsPrompt = mcp.buildToolsSystemPrompt();
-  const parts = [systemPrompt?.content, toolsPrompt].filter(Boolean);
+  const parts = [systemPrompt?.content].filter(Boolean);
   return parts.length > 0 ? resolveTemplateVars(parts.join('\n\n')) : null;
 });
 

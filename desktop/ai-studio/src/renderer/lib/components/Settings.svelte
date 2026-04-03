@@ -5,12 +5,14 @@
 
   // Defaults state
   let defaultEndpointId = $state(appState.defaults.endpointId ?? '');
+  let defaultModelId = $state(appState.defaults.modelId ?? '');
   let defaultSystemPromptId = $state(appState.defaults.systemPromptId ?? '');
   let defaultSamplingPresetId = $state(appState.defaults.samplingPresetId ?? '');
 
   async function saveDefaultsConfig() {
     await window.api.saveDefaults({
       endpointId: defaultEndpointId || undefined,
+      modelId: defaultModelId || undefined,
       systemPromptId: defaultSystemPromptId || undefined,
       samplingPresetId: defaultSamplingPresetId || undefined,
     });
@@ -173,7 +175,7 @@
     <div class="flex border-b border-border px-6 gap-1">
       {#each [['defaults', 'Defaults'], ['endpoints', 'Endpoints'], ['prompts', 'System Prompts'], ['sampling', 'Sampling'], ['help', 'Help']] as [key, label]}
         <button
-          onclick={() => activeTab = key as any}
+          onclick={() => activeTab = key as typeof activeTab}
           class="px-4 py-3 text-sm font-medium transition-colors cursor-pointer {activeTab === key ? 'text-accent border-b-2 border-accent' : 'text-text-muted hover:text-text-primary'}"
         >{label}</button>
       {/each}
@@ -196,6 +198,15 @@
                 <option value={ep.id}>{ep.name}</option>
               {/each}
             </select>
+          </div>
+
+          <div>
+            <label class="text-sm text-text-secondary block mb-1.5">Default Model ID</label>
+            <input
+              bind:value={defaultModelId}
+              placeholder="e.g. qwen2.5-7b-instruct (blank = first available)"
+              class="w-full bg-bg-input border border-border rounded-lg px-4 py-2.5 text-sm text-text-primary cursor-text"
+            />
           </div>
 
           <div>

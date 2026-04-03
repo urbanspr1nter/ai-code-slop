@@ -47,7 +47,7 @@ export function validateConfig(config: any): McpConfig {
   if (!config || typeof config !== 'object') throw new Error('Invalid MCP config: must be an object');
   if (!config.mcpServers || typeof config.mcpServers !== 'object') throw new Error('Invalid MCP config: missing mcpServers');
   for (const [name, server] of Object.entries(config.mcpServers)) {
-    const s = server as any;
+    const s = server as McpServerConfig;
     if (!s.command || typeof s.command !== 'string') throw new Error(`Invalid MCP server "${name}": command must be a non-empty string`);
     if (s.args !== undefined && !Array.isArray(s.args)) throw new Error(`Invalid MCP server "${name}": args must be an array`);
     if (s.env !== undefined && typeof s.env !== 'object') throw new Error(`Invalid MCP server "${name}": env must be an object`);
@@ -167,26 +167,6 @@ export async function callTool(toolName: string, args: any): Promise<any> {
     }
   }
   throw new Error(`Tool "${toolName}" not found in any connected MCP server`);
-}
-
-export function buildToolsSystemPrompt(): string {
-  const tools = getAllTools();
-  if (tools.length === 0) return '';
-
-  let prompt = `You have access to the following tools. To use a tool, respond with a JSON block in this exact format:
-
-\`\`\`tool_call
-{"name": "tool_name", "arguments": {"param": "value"}}
-\`\`\`
-
-Wait for the tool result before continuing. Available tools:\n\n`;
-
-  for (const tool of tools) {
-    prompt += `### ${tool.name}\n${tool.description}\n`;
-    prompt += `Parameters: ${JSON.stringify(tool.inputSchema, null, 2)}\n\n`;
-  }
-
-  return prompt;
 }
 
 export function toolsToOpenAIFormat(): any[] {

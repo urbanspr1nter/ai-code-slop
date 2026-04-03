@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
+import fs from 'fs';
+import Database from 'better-sqlite3';
 import { safeStorage } from 'electron';
-import { getDb } from './schema.js';
+import { getDb, resetDb } from './schema.js';
 
 function encryptKey(key: string | undefined): string | null {
   if (!key) return null;
@@ -230,10 +232,10 @@ export function updateConversation(id: string, updates: Partial<Pick<Conversatio
     .run(title, endpointId, modelId, systemPromptId ?? null, samplingPresetId ?? null, folderId ?? null, Date.now(), id);
 }
 
-export function saveConversationStats(id: string, stats: any, toolActivity?: any): void {
+export function saveConversationStats(id: string, stats: any): void {
   getDb()
-    .prepare('UPDATE conversations SET last_stats = ?, last_tool_activity = ? WHERE id = ?')
-    .run(JSON.stringify(stats), toolActivity ? JSON.stringify(toolActivity) : null, id);
+    .prepare('UPDATE conversations SET last_stats = ? WHERE id = ?')
+    .run(JSON.stringify(stats), id);
 }
 
 export function deleteConversation(id: string): void {
@@ -280,7 +282,7 @@ export function exportDatabase(): Buffer {
 }
 
 export function importDatabase(data: Buffer): void {
-  const newDb = new (require('better-sqlite3'))(data);
+  const newDb = new Database(data);
   // Validate it has our tables
   const tables = newDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r: any) => r.name);
   const required = ['endpoints', 'conversations', 'messages', 'system_prompts', 'sampling_presets'];
@@ -292,12 +294,11 @@ export function importDatabase(data: Buffer): void {
   }
   newDb.close();
   // Overwrite current db file
-  const fs = require('fs');
   const dbPath = getDb().name;
   getDb().close();
   fs.writeFileSync(dbPath, data);
   // Force re-open on next getDb() call
-  (globalThis as any).__db = undefined;
+  resetDb();
 }
 
 // ---- Row mappers ----
@@ -322,14 +323,13 @@ function mapFolder(row: any): Folder {
 }
 
 function mapConversation(row: any): Conversation {
-  let lastStats, lastToolActivity;
+  let lastStats;
   try { lastStats = row.last_stats ? JSON.parse(row.last_stats) : undefined; } catch { lastStats = undefined; }
-  try { lastToolActivity = row.last_tool_activity ? JSON.parse(row.last_tool_activity) : undefined; } catch { lastToolActivity = undefined; }
   return {
     id: row.id, title: row.title, endpointId: row.endpoint_id, modelId: row.model_id,
     systemPromptId: row.system_prompt_id, samplingPresetId: row.sampling_preset_id,
     folderId: row.folder_id ?? undefined,
-    lastStats, lastToolActivity,
+    lastStats,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }

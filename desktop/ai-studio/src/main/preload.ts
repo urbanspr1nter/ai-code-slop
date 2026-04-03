@@ -34,7 +34,7 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('conversations:create', title, endpointId, modelId, systemPromptId, samplingPresetId, folderId),
   updateConversation: (id: string, updates: any) => ipcRenderer.invoke('conversations:update', id, updates),
   deleteConversation: (id: string) => ipcRenderer.invoke('conversations:delete', id),
-  saveConversationStats: (id: string, stats: any, toolActivity?: any) => ipcRenderer.invoke('conversations:save-stats', id, stats, toolActivity),
+  saveConversationStats: (id: string, stats: any) => ipcRenderer.invoke('conversations:save-stats', id, stats),
 
   // Messages
   listMessages: (conversationId: string) => ipcRenderer.invoke('messages:list', conversationId),
@@ -46,7 +46,7 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('messages:delete-after', conversationId, afterCreatedAt),
 
   // Chat
-  sendChat: (conversationId: string, channelId: string) => ipcRenderer.invoke('chat:send', conversationId, channelId),
+  sendChat: (conversationId: string, channelId: string, options?: { agentAddendum?: string; continuePrompt?: string }) => ipcRenderer.invoke('chat:send', conversationId, channelId, options),
   getEffectiveSystemPrompt: (conversationId: string) => ipcRenderer.invoke('chat:system-prompt', conversationId),
   abortChat: (channelId: string) => ipcRenderer.invoke('chat:abort', channelId),
   onStreamChunk: (channelId: string, callback: (chunk: any) => void) => {

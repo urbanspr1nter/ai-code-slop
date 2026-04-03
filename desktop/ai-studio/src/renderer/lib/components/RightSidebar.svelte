@@ -123,7 +123,6 @@
   let mcpConfigText = $state('');
   let mcpServers = $state<McpServerStatus[]>([]);
   let mcpTools = $state<McpToolInfo[]>([]);
-  let mcpEditing = $state(false);
   let mcpLoading = $state(false);
   let mcpError = $state('');
 
@@ -136,7 +135,7 @@
 
   async function startEditMcp() {
     mcpConfigText = await window.api.mcpGetConfig();
-    mcpEditing = true;
+    appState.mcpEditorOpen = true;
     mcpError = '';
   }
 
@@ -147,7 +146,7 @@
       JSON.parse(mcpConfigText);
       mcpServers = await window.api.mcpSaveConfig(mcpConfigText);
       mcpTools = await window.api.mcpGetTools();
-      mcpEditing = false;
+      appState.mcpEditorOpen = false;
       await loadMcpToolCount();
       showToast('MCP config saved');
     } catch (err: any) {
@@ -373,40 +372,14 @@
             </div>
           {/if}
 
-          <!-- Config editor -->
-          {#if mcpEditing}
-            <textarea
-              bind:value={mcpConfigText}
-              rows="10"
-              class="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary font-mono resize-y min-h-[120px] cursor-text"
-              spellcheck="false"
-            ></textarea>
-            {#if mcpError}
-              <div class="text-sm text-red-500">{mcpError}</div>
-            {/if}
-            <div class="flex gap-3">
-              <button
-                onclick={saveMcpConfig}
-                disabled={mcpLoading}
-                class="flex-1 py-2 px-3 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-lg text-sm font-medium cursor-pointer transition-colors"
-              >
-                {mcpLoading ? 'Saving...' : 'Save & Reconnect'}
-              </button>
-              <button
-                onclick={() => mcpEditing = false}
-                class="py-2 px-3 bg-bg-btn hover:bg-bg-btn-hover text-text-secondary rounded-lg text-sm cursor-pointer transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          {:else}
-            <div class="flex gap-3">
-              <button
-                onclick={startEditMcp}
-                class="flex-1 py-2 px-3 bg-bg-btn hover:bg-bg-btn-hover text-text-secondary rounded-lg text-sm cursor-pointer transition-colors"
-              >
-                Edit mcp.json
-              </button>
+          <!-- Config actions -->
+          <div class="flex gap-3">
+            <button
+              onclick={startEditMcp}
+              class="flex-1 py-2 px-3 bg-bg-btn hover:bg-bg-btn-hover text-text-secondary rounded-lg text-sm cursor-pointer transition-colors"
+            >
+              Edit mcp.json
+            </button>
               <button
                 onclick={reconnectMcp}
                 disabled={mcpLoading}
@@ -415,7 +388,6 @@
                 {mcpLoading ? '...' : 'Reconnect'}
               </button>
             </div>
-          {/if}
         </div>
       {/if}
     </div>

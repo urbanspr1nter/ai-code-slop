@@ -1,22 +1,40 @@
 <script lang="ts">
-  import { appState, loadMessages, loadModels, loadConversations } from '../stores/app.svelte';
+  import { appState, loadMessages, loadModels, loadConversations, showToast } from '../stores/app.svelte';
   import ChatMessage from './ChatMessage.svelte';
   import { renderMarkdown } from '../markdown';
+  import { parseThinking } from '../thinking';
+  import { AGENT_SYSTEM_ADDENDUM, AGENT_CONTINUE_PROMPT, AGENT_NUDGE_PROMPT, AGENT_DONE_MARKER, AGENT_MAX_EMPTY_RETRIES } from '../agent';
   import type { Conversation, MessageAttachment } from '../../../shared/types';
 
+  // ---- UI State ----
   let userInput = $state('');
   let messagesContainer: HTMLDivElement;
   let fileInput: HTMLInputElement;
   let textareaEl: HTMLTextAreaElement;
   let activeChannelId = $state<string | null>(null);
   let userAtBottom = $state(true);
-  let showScrollIndicator = $derived(isStreamingHere && !userAtBottom);
   let pendingImages = $state<MessageAttachment[]>([]);
   let draggingOver = $state(false);
   let toolActivity = $state<{ name: string; status: 'calling' | 'done' }[]>([]);
   let effectiveSystemPrompt = $state<string | null>(null);
   let systemPromptOpen = $state(false);
   let thinkingOpen = $state(false);
+
+  // ---- Agent State ----
+  let agent = $state({ mode: false, stepCount: 0, stopped: false, emptyCount: 0 });
+
+  function resetAgent() {
+    agent = { mode: false, stepCount: 0, stopped: false, emptyCount: 0 };
+  }
+
+  // ---- Debounced message refresh (avoid rapid reloads during tool call sequences) ----
+  let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
+  function debouncedLoadMessages(convId: string) {
+    if (refreshTimeout) clearTimeout(refreshTimeout);
+    refreshTimeout = setTimeout(() => {
+      if (appState.activeConversationId === convId) loadMessages(convId);
+    }, 150);
+  }
 
   const activeConv = $derived(
     appState.conversations.find((c) => c.id === appState.activeConversationId)
@@ -25,6 +43,7 @@
   const isStreamingHere = $derived(
     appState.isStreaming && appState.streamingConversationId === appState.activeConversationId
   );
+  const showScrollIndicator = $derived(isStreamingHere && !userAtBottom);
 
   // Load effective system prompt when conversation changes or prompt is edited
   $effect(() => {
@@ -42,19 +61,7 @@
 
   // Parse thinking traces from streaming content
   // Models may wrap thinking in <think>...</think> tags
-  function parseThinking(raw: string): { thinking: string; content: string } {
-    if (!raw) return { thinking: '', content: '' };
-    const thinkMatch = raw.match(/^<think>([\s\S]*?)(<\/think>)?([\s\S]*)$/);
-    if (thinkMatch) {
-      const thinking = thinkMatch[1] ?? '';
-      const closed = !!thinkMatch[2];
-      const content = closed ? (thinkMatch[3] ?? '') : '';
-      return { thinking: thinking.trim(), content: content.trim() };
-    }
-    return { thinking: '', content: raw };
-  }
-
-  const parsedStreaming = $derived(parseThinking(appState.streamingContent));
+  const parsedStreaming = $derived(parseThinking(appState.streamingContent, true));
   const streamingThinking = $derived(parsedStreaming.thinking);
   const streamingContent = $derived(parsedStreaming.content);
   const streamingHtmlContent = $derived(streamingContent ? renderMarkdown(streamingContent) : '');
@@ -127,11 +134,15 @@
     const hasImages = pendingImages.length > 0;
     if ((!hasText && !hasImages) || !appState.activeConversationId || isStreamingHere) return;
 
-    const content = userInput.trim();
+    const content = userInput.trimEnd();
     userInput = '';
     if (textareaEl) textareaEl.style.height = '';
     const attachments = pendingImages.length > 0 ? JSON.stringify(pendingImages) : undefined;
     pendingImages = [];
+
+    agent.stopped = false;
+    agent.stepCount = 0;
+    agent.emptyCount = 0;
 
     await window.api.createMessage(appState.activeConversationId, 'user', content || '(image)', attachments);
     await loadMessages(appState.activeConversationId);
@@ -145,7 +156,7 @@
     await streamResponse();
   }
 
-  async function streamResponse() {
+  async function streamResponse(continuePrompt?: string) {
     if (!appState.activeConversationId) return;
 
     const streamConvId = appState.activeConversationId;
@@ -212,13 +223,21 @@
           appState.lastStats = { ...appState.lastStats!, ttftMs };
         }
         cleanup(fullContent);
+      } else if (chunk.type === 'interim_assistant' && chunk.content) {
+        // Model generated text before/between tool calls — save as assistant message
+        if (streamConvId) {
+          window.api.createMessage(streamConvId, 'assistant', chunk.content).then(() => debouncedLoadMessages(streamConvId))
+          .catch(() => {});
+        }
+        // Reset streaming content since it was saved
+        fullContent = '';
+        appState.streamingContent = '';
       } else if (chunk.type === 'tool_call' && chunk.toolCall) {
         toolActivity = [...toolActivity, { name: chunk.toolCall.name, status: 'calling' }];
         // Save tool call as a message and refresh
         if (streamConvId) {
-          window.api.createMessage(streamConvId, 'tool_call', chunk.toolCall.arguments || '{}', undefined, chunk.toolCall.id, chunk.toolCall.name).then(() => {
-            if (appState.activeConversationId === streamConvId) loadMessages(streamConvId);
-          });
+          window.api.createMessage(streamConvId, 'tool_call', chunk.toolCall.arguments || '{}', undefined, chunk.toolCall.id, chunk.toolCall.name).then(() => debouncedLoadMessages(streamConvId))
+          .catch(() => {});
         }
       } else if (chunk.type === 'tool_result' && chunk.toolResult) {
         toolActivity = toolActivity.map((t) =>
@@ -228,9 +247,8 @@
         );
         // Save tool result as a message and refresh
         if (streamConvId) {
-          window.api.createMessage(streamConvId, 'tool', chunk.toolResult.result, undefined, chunk.toolResult.id, chunk.toolResult.name).then(() => {
-            if (appState.activeConversationId === streamConvId) loadMessages(streamConvId);
-          });
+          window.api.createMessage(streamConvId, 'tool', chunk.toolResult.result, undefined, chunk.toolResult.id, chunk.toolResult.name).then(() => debouncedLoadMessages(streamConvId))
+          .catch(() => {});
         }
       } else if (chunk.type === 'error') {
         cleanup(`Error: ${chunk.error}`);
@@ -238,28 +256,66 @@
     });
 
     try {
-      await window.api.sendChat(appState.activeConversationId, channelId);
+      await window.api.sendChat(appState.activeConversationId, channelId, {
+        agentAddendum: agent.mode ? AGENT_SYSTEM_ADDENDUM : undefined,
+        continuePrompt,
+      });
     } catch (err: any) {
       cleanup(`Error: ${err.message}`);
     }
+
   }
 
   async function finishStream(content: string, conversationId: string) {
+    let shouldAgentContinue = false;
+
+    // Strip [DONE] marker from agent mode responses
+    const cleanContent = content.replace(/\[DONE\]\s*$/i, '').trim();
+
     try {
-      if (conversationId && content) {
-        await window.api.createMessage(conversationId, 'assistant', content);
+      if (conversationId && cleanContent) {
+        await window.api.createMessage(conversationId, 'assistant', cleanContent);
         if (appState.activeConversationId === conversationId) {
           await loadMessages(conversationId);
         }
       }
-      // Persist stats + tool activity to DB
       if (conversationId && appState.lastStats) {
         await window.api.saveConversationStats(conversationId, appState.lastStats);
+      }
+
+      // Check agent continuation before resetting state
+      if (agent.mode && !agent.stopped && conversationId) {
+        const isDone = content.includes('[DONE]');
+        if (isDone) {
+          resetAgent();
+          showToast('Agent task completed');
+        } else {
+          shouldAgentContinue = true;
+        }
       }
     } finally {
       appState.isStreaming = false;
       appState.streamingContent = '';
       appState.streamingConversationId = null;
+    }
+
+    // Agent auto-continue (after streaming state is reset)
+    if (shouldAgentContinue) {
+      if (cleanContent.length === 0) {
+        agent.emptyCount++;
+        if (agent.emptyCount >= AGENT_MAX_EMPTY_RETRIES) {
+          resetAgent();
+          showToast('Agent stopped — model returned empty responses');
+          return;
+        }
+      } else {
+        agent.emptyCount = 0;
+      }
+
+      agent.stepCount++;
+      await new Promise((r) => setTimeout(r, 300));
+      const prompt = cleanContent.length === 0 ? AGENT_NUDGE_PROMPT : AGENT_CONTINUE_PROMPT;
+      await streamResponse(prompt);
     }
   }
 
@@ -284,6 +340,7 @@
   }
 
   async function stopResponse() {
+    agent.stopped = true;
     if (activeChannelId) {
       await window.api.abortChat(activeChannelId);
     }
@@ -662,6 +719,26 @@
           disabled={isStreamingHere}
         ></textarea>
 
+        <!-- Activity indicator -->
+        {#if isStreamingHere}
+          <div class="flex items-center gap-2 mt-2 px-1">
+            <div class="flex gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style="animation-delay: 0ms"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style="animation-delay: 150ms"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style="animation-delay: 300ms"></span>
+            </div>
+            <span class="text-xs text-text-muted">
+              {#if appState.promptProcessing}
+                Processing prompt...
+              {:else if toolActivity.some(t => t.status === 'calling')}
+                Running tool: {toolActivity.find(t => t.status === 'calling')?.name}...
+              {:else}
+                Generating...
+              {/if}
+            </span>
+          </div>
+        {/if}
+
         <!-- Bottom bar: left = attach + indicators, right = stats + send -->
         <div class="flex items-center justify-between mt-2">
           <!-- Left: attach + MCP indicator -->
@@ -674,6 +751,17 @@
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
               Attach
+            </button>
+
+            <!-- Agent mode toggle -->
+            <button
+              onclick={() => agent.mode = !agent.mode}
+              class="px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-colors flex items-center gap-1.5
+                {agent.mode ? 'bg-orange-100 border-orange-300 text-orange-700' : 'bg-bg-btn border-border text-text-secondary hover:text-text-primary'}"
+              title="{agent.mode ? 'Agent mode ON — model will work autonomously until done' : 'Enable agent mode'}"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><path d="M2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2"/><path d="M12 12l4-4"/></svg>
+              Agent{agent.mode && agent.stepCount > 0 ? ` (step ${agent.stepCount})` : ''}
             </button>
 
             {#if appState.mcpToolCount > 0}

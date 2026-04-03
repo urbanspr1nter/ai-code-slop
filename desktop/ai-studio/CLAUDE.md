@@ -74,7 +74,7 @@ All data flows: renderer `window.api.*` → preload `ipcRenderer.invoke` → mai
 - Per-request channels (`stream-{timestamp}`)
 - Main sends chunks via `webContents.send(channelId, chunk)`
 - Renderer subscribes via `window.api.onStreamChunk(channelId, cb)`
-- `StreamChunk` types: `delta`, `done`, `error`, `tool_call`, `tool_result`
+- `StreamChunk` types: `delta`, `done`, `error`, `tool_call`, `tool_result`, `interim_assistant`
 - Streaming scoped to conversation ID — switching chats doesn't leak or abort
 - Other chats remain interactive while one is streaming (per-conversation `isStreamingHere` guard)
 - Sidebar shows pulsing dot + "Generating..." on actively streaming conversations
@@ -93,7 +93,7 @@ All data flows: renderer `window.api.*` → preload `ipcRenderer.invoke` → mai
 - Servers spawned as stdio child processes via `@modelcontextprotocol/sdk`
 - Servers connect BEFORE window loads so tools are ready on startup
 - Minimal env for child processes (PATH, HOME, TEMP, LANG + explicit config env)
-- Tools passed to LLM via OpenAI `tools` parameter + system prompt fallback
+- Tools passed to LLM via OpenAI `tools` parameter only (no system prompt duplication)
 - Tool call loop: unlimited rounds, streaming on all rounds
 - Tool calls/results saved as messages (role `tool_call` / `tool`) for persistent inline display
 - Config validated on save (command must be non-empty string, args must be array, env must be object)
@@ -123,10 +123,18 @@ All data flows: renderer `window.api.*` → preload `ipcRenderer.invoke` → mai
 - Export options: individual DB, full zip, folder conversations as JSON (OpenAI API format with multimodal vision support)
 
 ### Multi-turn History
-- Only `user` and `assistant` messages sent to the API for subsequent turns
-- `tool_call` and `tool` messages skipped (they're UI-only, tool loop happens live per-turn)
+- `user` and `assistant` messages sent directly
+- `tool_call` and `tool` messages reconstructed into proper OpenAI format (assistant with `tool_calls` array + tool result messages)
 - `<think>...</think>` tags stripped from assistant messages before sending to API
 - Thinking traces preserved in DB and shown as collapsible amber cards
+
+### Agent Mode
+- Toggle in input bar — orange when active, shows step counter
+- System prompt addendum injected via `agentAddendum` parameter (from `src/renderer/lib/agent.ts`)
+- Auto-continue loop: after each response, sends transient "Continue" user message (not persisted to DB)
+- `[DONE]` marker detection ends the loop with a toast notification
+- Empty response handling: nudge prompt on first empty, stops after 3 consecutive empties
+- Stop button aborts both current generation and agent loop
 
 ## Key Patterns
 

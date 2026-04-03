@@ -8,13 +8,6 @@ export interface Endpoint {
   updatedAt: number;
 }
 
-// ---- Models ----
-export interface Model {
-  id: string;
-  name: string;
-  endpointId: string;
-}
-
 // ---- Folders ----
 export interface Folder {
   id: string;
@@ -33,7 +26,6 @@ export interface Conversation {
   samplingPresetId?: string;
   folderId?: string;
   lastStats?: StreamStats;
-  lastToolActivity?: { name: string; status: string; arguments?: string; result?: string }[];
   createdAt: number;
   updatedAt: number;
 }
@@ -102,7 +94,7 @@ export interface StreamStats {
 }
 
 export interface StreamChunk {
-  type: 'delta' | 'done' | 'error' | 'tool_call' | 'tool_result';
+  type: 'delta' | 'done' | 'error' | 'tool_call' | 'tool_result' | 'interim_assistant';
   content?: string;
   error?: string;
   stats?: StreamStats;

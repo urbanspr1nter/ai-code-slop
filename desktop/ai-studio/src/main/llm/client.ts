@@ -52,8 +52,6 @@ function buildStats(usage: any, generationStartTime: number, completionTokensFal
   };
 }
 
-const MAX_TOOL_ROUNDS = Infinity;
-
 export async function chatCompletion(
   req: ChatRequest,
   window: BrowserWindow,
@@ -74,7 +72,8 @@ export async function chatCompletion(
   const hasTools = req.tools && req.tools.length > 0;
 
   try {
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    let round = 0;
+    while (true) {
       const body: any = {
         model: req.model,
         messages,
@@ -90,22 +89,22 @@ export async function chatCompletion(
       const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: abortController.signal });
       if (!res.ok) {
         const text = await res.text();
+        console.error(`[chat] error ${res.status}: ${text.slice(0, 200)}`);
         window.webContents.send(channelId, { type: 'error', error: `${res.status}: ${text}` } satisfies StreamChunk);
         return;
       }
 
-      // Always stream and emit deltas so user sees progress
-      const emitDeltas = true;
-      const result = await readStream(res, window, channelId, abortController, generationStartTime, totalTokenCount, emitDeltas);
-      if (result.aborted) return;
+      const result = await readStream(res, window, channelId, abortController, generationStartTime, totalTokenCount);
+      if (result.aborted) {
+        const stats = buildStats(lastUsage, generationStartTime, totalTokenCount + result.tokenCount);
+        window.webContents.send(channelId, { type: 'done', stats } satisfies StreamChunk);
+        return;
+      }
       if (result.usage) lastUsage = result.usage;
       totalTokenCount += result.tokenCount;
 
-      const resultContent = result.content;
-      const resultToolCalls = result.toolCalls;
-
       // Filter to only valid tool calls (must have a function name)
-      const validToolCalls = resultToolCalls.filter((tc: any) => tc.function?.name);
+      const validToolCalls = result.toolCalls.filter((tc: any) => tc.function?.name);
 
       if (validToolCalls.length > 0) {
         const cleanedToolCalls = validToolCalls.map((tc: any, i: number) => ({
@@ -117,7 +116,13 @@ export async function chatCompletion(
           },
         }));
 
-        messages.push({ role: 'assistant', content: resultContent || null, tool_calls: cleanedToolCalls });
+        // If the model generated text before/alongside tool calls, send it as a
+        // separate "interim" message so it renders between tool traces in the chat
+        if (result.content.trim()) {
+          window.webContents.send(channelId, { type: 'interim_assistant', content: result.content } satisfies StreamChunk);
+        }
+
+        messages.push({ role: 'assistant', content: result.content || null, tool_calls: cleanedToolCalls });
 
         for (const tc of cleanedToolCalls) {
           const fnName = tc.function.name;
@@ -145,6 +150,7 @@ export async function chatCompletion(
         }
 
         // Continue to next round
+        round++;
         continue;
       }
 
@@ -153,10 +159,8 @@ export async function chatCompletion(
       window.webContents.send(channelId, { type: 'done', stats } satisfies StreamChunk);
       return;
     }
-
-    // Should never reach here with infinite loop — only exits via return or error
   } catch (err: any) {
-    if (err.name === 'AbortError') {
+    if (err.name === 'AbortError' || err.message === 'terminated' || err.message === 'The operation was aborted') {
       const stats = buildStats(lastUsage, generationStartTime, totalTokenCount);
       window.webContents.send(channelId, { type: 'done', stats } satisfies StreamChunk);
     } else {
@@ -182,7 +186,6 @@ async function readStream(
   abortController: AbortController,
   generationStartTime: number,
   existingTokenCount: number,
-  emitDeltas: boolean,
 ): Promise<StreamResult> {
   const reader = res.body?.getReader();
   if (!reader) {
@@ -230,9 +233,7 @@ async function readStream(
           if (delta) {
             content += delta;
             tokenCount++;
-            if (emitDeltas) {
-              window.webContents.send(channelId, { type: 'delta', content: delta } satisfies StreamChunk);
-            }
+            window.webContents.send(channelId, { type: 'delta', content: delta } satisfies StreamChunk);
           }
 
           // Tool call deltas (streamed incrementally)
@@ -255,7 +256,8 @@ async function readStream(
     }
     return { content, toolCalls: [...toolCalls.values()], tokenCount, usage, aborted: false };
   } catch (err: any) {
-    if (err.name === 'AbortError') {
+    console.error(`[readStream] error: name=${err.name} message=${err.message} contentSoFar=${content.length}chars tokensSoFar=${tokenCount}`);
+    if (err.name === 'AbortError' || err.message === 'terminated' || err.message === 'The operation was aborted') {
       return { content, toolCalls: [], tokenCount, usage, aborted: true };
     }
     throw err;

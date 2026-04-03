@@ -19,13 +19,14 @@ export const appState = $state({
   sidebarOpen: true,
   settingsOpen: false,
   rightSidebarOpen: false,
+  mcpEditorOpen: false,
   lastStats: null as StreamStats | null,
   lastStatsConversationId: null as string | null,
   promptProcessing: false,
   promptProcessingStartTime: 0,
   systemPromptVersion: 0,
   mcpToolCount: 0,
-  defaults: { endpointId: undefined, systemPromptId: undefined, samplingPresetId: undefined } as { endpointId?: string; systemPromptId?: string; samplingPresetId?: string },
+  defaults: { endpointId: undefined, modelId: undefined, systemPromptId: undefined, samplingPresetId: undefined } as { endpointId?: string; modelId?: string; systemPromptId?: string; samplingPresetId?: string },
   toasts: [] as { id: number; message: string; type: 'success' | 'error' }[],
 });
 
