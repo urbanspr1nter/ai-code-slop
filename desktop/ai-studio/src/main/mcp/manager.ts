@@ -77,7 +77,7 @@ export async function connectServer(name: string, config: McpServerConfig): Prom
     } as Record<string, string>,
   });
 
-  const client = new Client({ name: 'ai-studio', version: '0.1.0' }, { capabilities: {} });
+  const client = new Client({ name: 'ai-studio', version: '0.1.0' }, { capabilities: {}, timeout: 2_147_483_647 });
 
   await client.connect(transport);
 
@@ -152,7 +152,7 @@ export async function callTool(toolName: string, args: any): Promise<any> {
   for (const server of activeServers.values()) {
     const tool = server.tools.find((t) => t.name === toolName);
     if (tool) {
-      const result = await server.client.callTool({ name: toolName, arguments: args });
+      const result = await server.client.callTool({ name: toolName, arguments: args }, undefined, { timeout: 2_147_483_647 });
       // Extract text content from MCP response
       if (result.content && Array.isArray(result.content)) {
         return result.content

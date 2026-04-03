@@ -568,7 +568,7 @@
 
     <!-- Messages -->
     <div bind:this={messagesContainer} class="flex-1 overflow-y-auto px-6 py-8 relative" onscroll={handleScroll}>
-      <div class="max-w-3xl mx-auto">
+      <div class="max-w-5xl mx-auto">
 
         <!-- System prompt banner -->
         {#if effectiveSystemPrompt}
@@ -678,7 +678,7 @@
         onchange={handleFileSelect}
       />
 
-      <div class="max-w-3xl mx-auto">
+      <div class="max-w-5xl mx-auto">
         <!-- Image carousel -->
         {#if pendingImages.length > 0}
           <div class="flex gap-3 mb-3 overflow-x-auto pb-1">
